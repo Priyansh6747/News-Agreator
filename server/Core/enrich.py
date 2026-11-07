@@ -77,6 +77,7 @@ async def _enrich_cluster(
     settings: Settings,
     coverage: CoverageCollector,
     clock: Clock,
+    generator_semaphore: asyncio.Semaphore,
 ) -> None:
     representative = cluster.members[0]
     for member in cluster.members[1:]:
@@ -160,12 +161,13 @@ async def _enrich_cluster(
         extracted.text[: settings.fact_text_chars],
     )
     try:
-        result = await generator.complete_json(
-            schema=ExtractedFacts,
-            system=FACT_SYSTEM,
-            user=prompt,
-            max_tokens=settings.fact_max_tokens,
-        )
+        async with generator_semaphore:
+            result = await generator.complete_json(
+                schema=ExtractedFacts,
+                system=FACT_SYSTEM,
+                user=prompt,
+                max_tokens=settings.fact_max_tokens,
+            )
     except Exception as error:  # noqa: BLE001
         _set_status(representative, TextStatus.OK, coverage)
         coverage.note(
@@ -228,6 +230,7 @@ async def enrich_clusters(
         return clusters
 
     semaphore = asyncio.Semaphore(max(1, settings.fetch_concurrency))
+    generator_semaphore = asyncio.Semaphore(max(1, settings.generator_concurrency))
 
     async def process(cluster: StoryCluster) -> None:
         async with semaphore:
@@ -243,6 +246,7 @@ async def enrich_clusters(
                 settings=settings,
                 coverage=coverage,
                 clock=clock,
+                generator_semaphore=generator_semaphore,
             )
 
     await asyncio.gather(*(process(cluster) for cluster in selected))

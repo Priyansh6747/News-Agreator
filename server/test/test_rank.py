@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from Core.coverage import CoverageCollector
-from Core.models import QueryPlan, Tier
+from Core.models import ArticleType, CandidateAssessment, QueryPlan, Tier
 from Core.rank import rank_candidates
 from Core.registry import SourceRegistry
 from Core.settings import Settings
@@ -81,6 +81,53 @@ async def test_orders_by_tier_when_relevance_is_equal(
     )
     assert ranked[0].tier is Tier.T1
     assert ranked[0].score > ranked[1].score
+
+
+class FixedDecisions(HeuristicDecisionEngine):
+    def __init__(self, relevance: float):
+        self.relevance = relevance
+
+    async def assess(self, query, candidates):
+        return [
+            CandidateAssessment(
+                relevance=self.relevance,
+                article_type=ArticleType.REPORT,
+            )
+            for _ in candidates
+        ]
+
+
+async def test_tier_aware_relevance_floor(
+    settings: Settings,
+    registry: SourceRegistry,
+) -> None:
+    candidates = [
+        make_candidate(
+            title="Gold rises",
+            url="https://www.bbc.com/news/gold",
+            publisher="BBC News",
+            tier=Tier.T2,
+            family="bbc",
+        ),
+        make_candidate(
+            title="Gold climbs",
+            url="https://www.example.com/gold",
+            publisher="Example",
+            tier=Tier.UNREVIEWED,
+            family=None,
+        ),
+    ]
+    coverage = CoverageCollector()
+    ranked = await rank_candidates(
+        candidates,
+        plan=plan(),
+        decisions=FixedDecisions(0.32),
+        settings=settings,
+        coverage=coverage,
+        clock=StaticClock(NOW),
+    )
+    assert [candidate.tier for candidate in ranked] == [Tier.T2]
+    assert coverage.finish().drops["low_relevance"] == 1
 
 
 async def test_relevance_floor_drops_off_topic(

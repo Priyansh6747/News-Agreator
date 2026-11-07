@@ -97,7 +97,10 @@ async def rank_candidates(
     scored: list[Candidate] = []
     for candidate, assessment in zip(kept, assessments):
         candidate.relevance = _clamp(assessment.relevance)
-        if candidate.relevance < settings.min_candidate_relevance:
+        threshold = settings.min_relevance_by_tier.get(
+            candidate.tier.value, settings.min_candidate_relevance
+        )
+        if candidate.relevance < threshold:
             coverage.add_drop("low_relevance", backend=candidate.backend)
             continue
         candidate.article_type = assessment.article_type

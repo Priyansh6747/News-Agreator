@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     fetch_max_reps: int = 8
     extract_min_words: int = 120
     injection_threshold: float = 0.7
-    fact_text_chars: int = 8000
-    fact_max_tokens: int = 1024
+    fact_text_chars: int = 4000
+    fact_max_tokens: int = 768
     robots_cache_ttl_s: int = 86400
 
     fetch_concurrency: int = 4
@@ -118,6 +118,15 @@ class Settings(BaseSettings):
         default_factory=lambda: {"relevance": 0.50, "tier": 0.30, "recency": 0.20}
     )
     min_candidate_relevance: float = 0.4
+    min_relevance_by_tier: dict[str, float] = Field(
+        default_factory=lambda: {
+            "T1": 0.25,
+            "T2": 0.30,
+            "T3": 0.35,
+            "T4": 0.40,
+            "unreviewed": 0.45,
+        }
+    )
     type_weights: dict[str, float] = Field(
         default_factory=lambda: {
             "report": 1.0,
@@ -168,9 +177,10 @@ class Settings(BaseSettings):
     generator_api_key: str = ""
     generator_model: str = ""
     generator_timeout_s: float = 60.0
-    generator_max_tokens: int = 1600
+    generator_max_tokens: int = 1024
     generator_temperature: float = 0.2
     generator_retry_base_s: float = 1.0
+    generator_concurrency: int = 1
 
 
 @lru_cache(maxsize=1)

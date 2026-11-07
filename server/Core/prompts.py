@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 from Core.models import StoryCluster
 
@@ -20,12 +20,14 @@ FACT_SYSTEM = (
     "Each fact must include the number, percentage, date, or amount that carries the claim, "
     "and a verbatim quote of at most 25 words. Do not return an empty list when the text "
     "contains prices, percentages, dates, or named events. Do not infer or add external "
-    "knowledge."
+    "knowledge. Example: "
+    '{"facts": [{"claim": "Gold rose 4.5%", "value": "4.5%", '
+    '"quote": "Gold prices surged 4.5 per cent for the week."}]}'
 )
 
 
 class DraftFactRow(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     value: str
     meaning: str
@@ -33,7 +35,7 @@ class DraftFactRow(BaseModel):
 
 
 class DraftTimelineEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     at: datetime
     what: str
@@ -41,21 +43,21 @@ class DraftTimelineEntry(BaseModel):
 
 
 class DraftPosition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     claim: str
     cluster_id: str
 
 
 class DraftDisagreement(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     topic: str
     positions: list[DraftPosition] = Field(min_length=2)
 
 
 class BriefDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     answer: str
     key_facts: list[DraftFactRow] = Field(default_factory=list)
@@ -65,17 +67,36 @@ class BriefDraft(BaseModel):
 
 
 class DraftFact(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
-    claim: str
-    value: str | None = None
-    quote: str | None = None
+    claim: str = Field(
+        validation_alias=AliasChoices("claim", "fact", "statement", "text")
+    )
+    value: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("value", "number", "amount", "data"),
+    )
+    quote: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("quote", "evidence", "excerpt", "source_quote"),
+    )
 
 
 class ExtractedFacts(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     facts: list[DraftFact] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize(cls, value):
+        if isinstance(value, list):
+            return {"facts": value}
+        if isinstance(value, dict) and "facts" not in value:
+            for key in ("fact", "items", "data", "results"):
+                if key in value:
+                    return {"facts": value[key]}
+        return value
 
 
 def _cluster_payload(cluster: StoryCluster) -> dict[str, object]:
