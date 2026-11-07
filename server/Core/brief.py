@@ -208,7 +208,9 @@ async def build_brief(
             result = await generator.complete_json(
                 schema=BriefDraft,
                 system=BRIEF_SYSTEM,
-                user=build_brief_prompt(query, clusters),
+                user=build_brief_prompt(
+                    query, clusters, plan.brief_schema.value
+                ),
                 max_tokens=settings.generator_max_tokens,
             )
             draft = BriefDraft.model_validate(result.model_dump())

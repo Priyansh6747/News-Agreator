@@ -30,10 +30,12 @@ def _enabled(settings: Settings, backend: Backend) -> bool:
     return backend.value in settings.enabled_backends
 
 
-def _build_decisions(settings: Settings) -> tuple[DecisionEngine, int | None]:
+def _build_decisions(
+    settings: Settings,
+) -> tuple[DecisionEngine, int | None, int | None]:
     heuristic = HeuristicDecisionEngine()
     if settings.app_env == "demo" or settings.decision_engine == "heuristic":
-        return heuristic, None
+        return heuristic, None, None
     try:
         from tool.decisions_laya import LayaDecisionEngine
 
@@ -46,18 +48,19 @@ def _build_decisions(settings: Settings) -> tuple[DecisionEngine, int | None]:
                 max_loaded=settings.laya_max_loaded,
                 batch_size=settings.laya_batch_size,
             ),
-            settings.laya_assess_top,
+            settings.laya_assess_top or None,
+            settings.laya_type_top or None,
         )
     except Exception as error:  # noqa: BLE001
         logger.warning("laya unavailable (%s); using heuristic", type(error).__name__)
-        return heuristic, None
+        return heuristic, None, None
 
 
 def build_pipeline(settings: Settings) -> Pipeline:
     global _http_client
     registry = SourceRegistry.load()
     clock = SystemClock()
-    decisions, assess_top = _build_decisions(settings)
+    decisions, assess_top, type_top = _build_decisions(settings)
 
     if settings.app_env == "demo":
         now = clock.now()
@@ -73,6 +76,7 @@ def build_pipeline(settings: Settings) -> Pipeline:
             settings=settings,
             clock=clock,
             assess_top=assess_top,
+            type_top=type_top,
         )
 
     _http_client = HttpClient(settings)
@@ -104,6 +108,7 @@ def build_pipeline(settings: Settings) -> Pipeline:
         extractor=TrafilaturaExtractor(),
         generator=generator,
         assess_top=assess_top,
+        type_top=type_top,
     )
 
 

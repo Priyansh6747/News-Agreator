@@ -2,11 +2,24 @@ from __future__ import annotations
 
 import pytest
 
-from Core.models import ArticleType, CandidateAssessment, QueryClass
+from Core.models import (
+    ArticleType,
+    BriefSchema,
+    CandidateAssessment,
+    QueryClass,
+    QueryIntent,
+)
 from test.helpers import make_candidate
 from tool.decisions_heuristic import HeuristicDecisionEngine
 from tool.decisions_laya import LayaDecisionEngine
-from tool.laya_questions import QUERY_CLASS_QUESTIONS, assessment_questions, injection_question
+from tool.laya_questions import (
+    QUERY_CLASS_QUESTIONS,
+    article_type_questions,
+    assessment_questions,
+    injection_question,
+    query_analysis_questions,
+    relevance_questions,
+)
 
 
 class FakeRouter:
@@ -14,12 +27,18 @@ class FakeRouter:
         self,
         *,
         choice: str = "market",
+        sensitivity: float = 2.2,
+        intent: str = "event_update",
+        schema: str = "event_timeline",
         relevance: tuple[float, ...] = (0.9, 0.1),
         types: tuple[str, ...] = ("straight_report", "opinion_piece"),
         injection: float = 0.2,
         error: BaseException | None = None,
     ):
         self.choice = choice
+        self.sensitivity = sensitivity
+        self.intent = intent
+        self.schema = schema
         self.relevance = relevance
         self.types = types
         self.injection = injection
@@ -31,6 +50,15 @@ class FakeRouter:
         self.predict_calls.append((state, questions))
         if self.error is not None:
             raise self.error
+        if "time_sensitivity" in questions:
+            return {
+                "answers": {
+                    "query_class": {"choice": self.choice},
+                    "time_sensitivity": {"score": self.sensitivity},
+                    "intent": {"choice": self.intent},
+                    "brief_schema": {"choice": self.schema},
+                }
+            }
         if "query_class" in questions:
             return {"answers": {"query_class": {"choice": self.choice}}}
         if "injection" in questions:
@@ -55,6 +83,43 @@ class FakeRouter:
                 }
             )
         return results
+
+
+async def test_analyzes_query_with_one_predict() -> None:
+    router = FakeRouter(
+        choice="market",
+        sensitivity=2.2,
+        intent="price_check",
+        schema="price_table",
+    )
+    engine = LayaDecisionEngine(router=router)
+    analysis = await engine.analyze_query("gold prices")
+    assert analysis.query_class is QueryClass.MARKET
+    assert analysis.time_sensitivity == 2
+    assert analysis.intent is QueryIntent.PRICE_CHECK
+    assert analysis.brief_schema is BriefSchema.PRICE_TABLE
+    assert router.predict_calls[0][0] == {"query": "gold prices"}
+    assert router.predict_calls[0][1] == query_analysis_questions()
+
+
+async def test_relevance_batch() -> None:
+    router = FakeRouter(relevance=(0.9, 0.1))
+    engine = LayaDecisionEngine(router=router)
+    candidates = [make_candidate(title="Gold rises"), make_candidate(title="Gold falls")]
+    scores = await engine.relevance("gold prices", candidates)
+    assert scores == [0.9, 0.1]
+    requests, _, _ = router.batch_calls[0]
+    assert requests[0]["questions"] == relevance_questions("gold prices")
+
+
+async def test_article_types_batch() -> None:
+    router = FakeRouter(types=("straight_report", "opinion_piece"))
+    engine = LayaDecisionEngine(router=router)
+    candidates = [make_candidate(title="Gold rises"), make_candidate(title="Gold falls")]
+    types = await engine.article_types(candidates)
+    assert types == [ArticleType.REPORT, ArticleType.OPINION]
+    requests, _, _ = router.batch_calls[0]
+    assert requests[0]["questions"] == article_type_questions()
 
 
 async def test_classifies_query_with_single_predict() -> None:

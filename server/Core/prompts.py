@@ -123,10 +123,16 @@ def _cluster_payload(cluster: StoryCluster) -> dict[str, object]:
     }
 
 
-def build_brief_prompt(query: str, clusters: list[StoryCluster]) -> str:
+def build_brief_prompt(
+    query: str,
+    clusters: list[StoryCluster],
+    brief_schema: str | None = None,
+) -> str:
     payload = [_cluster_payload(cluster) for cluster in clusters]
+    schema_line = f"Preferred brief schema: {brief_schema}\n" if brief_schema else ""
     return (
-        f"Query: {query}\n\n"
+        f"Query: {query}\n"
+        f"{schema_line}\n"
         "Clusters (JSON). Cite these cluster_id values only:\n"
         f"{json.dumps(payload, ensure_ascii=False)}"
     )

@@ -51,6 +51,7 @@ class Pipeline:
         extractor: TextExtractor | None = None,
         generator: Generator | None = None,
         assess_top: int | None = None,
+        type_top: int | None = None,
     ):
         self.backends = backends
         self.decisions = decisions
@@ -62,6 +63,7 @@ class Pipeline:
         self.extractor = extractor
         self.generator = generator
         self.assess_top = assess_top
+        self.type_top = type_top
 
     async def _emit(
         self,
@@ -111,6 +113,10 @@ class Pipeline:
                 "site_scoped": len(plan.site_scoped),
                 "freshness_hours": plan.freshness_hours,
             },
+            message=(
+                f"class={plan.query_class.value} intent={plan.intent.value} "
+                f"schema={plan.brief_schema.value} sensitivity={plan.time_sensitivity}"
+            ),
             elapsed_ms=elapsed,
         )
 
@@ -145,6 +151,7 @@ class Pipeline:
                     coverage=coverage,
                     clock=self.clock,
                     assess_top=self.assess_top,
+                    type_top=self.type_top,
                 )
                 elapsed = self._record(coverage, Stage.RANK, started)
                 await self._emit(

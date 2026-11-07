@@ -16,6 +16,33 @@ class QueryClass(StrEnum):
     OTHER = "other"
 
 
+class QueryIntent(StrEnum):
+    PRICE_CHECK = "price_check"
+    EVENT_UPDATE = "event_update"
+    EXPLAINER = "explainer"
+    COMPARISON = "comparison"
+    COMPANY_CHECK = "company_check"
+    OTHER = "other"
+
+
+class BriefSchema(StrEnum):
+    PRICE_TABLE = "price_table"
+    EVENT_TIMELINE = "event_timeline"
+    CONFLICT_SUMMARY = "conflict_summary"
+    COMPANY_SNAPSHOT = "company_snapshot"
+    COMPARISON_TABLE = "comparison_table"
+    GENERAL_BRIEF = "general_brief"
+
+
+class QueryAnalysis(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query_class: QueryClass = QueryClass.OTHER
+    time_sensitivity: int = Field(default=1, ge=0, le=3)
+    intent: QueryIntent = QueryIntent.OTHER
+    brief_schema: BriefSchema = BriefSchema.GENERAL_BRIEF
+
+
 class Backend(StrEnum):
     GOOGLE_NEWS = "google_news"
     BING_NEWS = "bing_news"
@@ -103,6 +130,9 @@ class QueryPlan(BaseModel):
     query: str
     normalized: str
     query_class: QueryClass = QueryClass.OTHER
+    time_sensitivity: int = 1
+    intent: QueryIntent = QueryIntent.OTHER
+    brief_schema: BriefSchema = BriefSchema.GENERAL_BRIEF
     freshness_hours: int = 96
     phrasings: list[str] = Field(default_factory=list)
     site_scoped: list[str] = Field(default_factory=list)

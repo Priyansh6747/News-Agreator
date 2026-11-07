@@ -7,11 +7,13 @@ from typing import Protocol, TypeVar
 from pydantic import BaseModel
 
 from Core.models import (
+    ArticleType,
     Backend,
     Candidate,
     CandidateAssessment,
     ExtractedText,
     FetchedPage,
+    QueryAnalysis,
     QueryClass,
     QueryPlan,
     SearchResult,
@@ -40,7 +42,17 @@ class TextExtractor(Protocol):
 
 
 class DecisionEngine(Protocol):
+    async def analyze_query(self, query: str) -> QueryAnalysis: ...
+
     async def classify_query(self, query: str) -> QueryClass: ...
+
+    async def relevance(
+        self, query: str, candidates: Sequence[Candidate]
+    ) -> list[float]: ...
+
+    async def article_types(
+        self, candidates: Sequence[Candidate]
+    ) -> list[ArticleType]: ...
 
     async def assess(
         self, query: str, candidates: Sequence[Candidate]

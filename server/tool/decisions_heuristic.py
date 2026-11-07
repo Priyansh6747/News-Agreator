@@ -3,7 +3,15 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
-from Core.models import ArticleType, Candidate, CandidateAssessment, QueryClass
+from Core.models import (
+    ArticleType,
+    BriefSchema,
+    Candidate,
+    CandidateAssessment,
+    QueryAnalysis,
+    QueryClass,
+    QueryIntent,
+)
 
 COMPARISON_TERMS = {"vs", "versus", "compare", "comparison", "difference", "better"}
 MARKET_TERMS = {
@@ -106,27 +114,87 @@ class HeuristicDecisionEngine:
             return QueryClass.COMPANY
         return QueryClass.OTHER
 
-    async def assess(
+    async def analyze_query(self, query: str) -> QueryAnalysis:
+        query_class = await self.classify_query(query)
+        tokens = _tokens(query)
+        if tokens & COMPARISON_TERMS:
+            intent = QueryIntent.COMPARISON
+        elif tokens & {"what", "how", "why", "explain", "explained", "explainer", "meaning"}:
+            intent = QueryIntent.EXPLAINER
+        elif tokens & (MARKET_TERMS | {"price", "prices", "rate", "rates"}):
+            intent = QueryIntent.PRICE_CHECK
+        elif tokens & COMPANY_TERMS:
+            intent = QueryIntent.COMPANY_CHECK
+        elif tokens & (EVENT_TERMS | GEOPOLITICS_TERMS):
+            intent = QueryIntent.EVENT_UPDATE
+        else:
+            intent = QueryIntent.OTHER
+
+        sensitivity = {
+            QueryClass.MARKET: 3,
+            QueryClass.EVENT: 2,
+            QueryClass.GEOPOLITICS: 2,
+            QueryClass.COMPANY: 1,
+            QueryClass.COMPARISON: 0,
+            QueryClass.OTHER: 1,
+        }[query_class]
+        if intent is QueryIntent.EXPLAINER:
+            sensitivity = 0
+        schema = {
+            QueryClass.MARKET: BriefSchema.PRICE_TABLE,
+            QueryClass.EVENT: BriefSchema.EVENT_TIMELINE,
+            QueryClass.GEOPOLITICS: BriefSchema.CONFLICT_SUMMARY,
+            QueryClass.COMPANY: BriefSchema.COMPANY_SNAPSHOT,
+            QueryClass.COMPARISON: BriefSchema.COMPARISON_TABLE,
+            QueryClass.OTHER: BriefSchema.GENERAL_BRIEF,
+        }[query_class]
+        if intent is QueryIntent.EXPLAINER:
+            schema = BriefSchema.GENERAL_BRIEF
+
+        return QueryAnalysis(
+            query_class=query_class,
+            time_sensitivity=sensitivity,
+            intent=intent,
+            brief_schema=schema,
+        )
+
+    def _relevance_scores(
         self, query: str, candidates: Sequence[Candidate]
-    ) -> list[CandidateAssessment]:
+    ) -> list[float]:
         query_tokens = _tokens(query)
         lowered = query.lower()
-        assessments: list[CandidateAssessment] = []
+        scores: list[float] = []
         for candidate in candidates:
             text = f"{candidate.title} {candidate.snippet or ''}"
             overlap = (
                 len(query_tokens & _tokens(text)) / len(query_tokens) if query_tokens else 0.0
             )
             phrase_bonus = 0.2 if lowered in text.lower() else 0.0
-            relevance = min(1.0, 0.8 * overlap + phrase_bonus)
-            assessments.append(
-                CandidateAssessment(
-                    relevance=relevance,
-                    article_type=self._article_type(candidate),
-                    confidence=relevance,
-                )
+            scores.append(min(1.0, 0.8 * overlap + phrase_bonus))
+        return scores
+
+    async def relevance(
+        self, query: str, candidates: Sequence[Candidate]
+    ) -> list[float]:
+        return self._relevance_scores(query, candidates)
+
+    async def article_types(
+        self, candidates: Sequence[Candidate]
+    ) -> list[ArticleType]:
+        return [self._article_type(candidate) for candidate in candidates]
+
+    async def assess(
+        self, query: str, candidates: Sequence[Candidate]
+    ) -> list[CandidateAssessment]:
+        scores = self._relevance_scores(query, candidates)
+        return [
+            CandidateAssessment(
+                relevance=score,
+                article_type=self._article_type(candidate),
+                confidence=score,
             )
-        return assessments
+            for candidate, score in zip(candidates, scores)
+        ]
 
     def _article_type(self, candidate: Candidate) -> ArticleType:
         title = candidate.title.lower()

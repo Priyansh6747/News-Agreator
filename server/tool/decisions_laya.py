@@ -4,12 +4,23 @@ import asyncio
 import logging
 from collections.abc import Sequence
 
-from Core.models import ArticleType, Candidate, CandidateAssessment, QueryClass
+from Core.models import (
+    ArticleType,
+    BriefSchema,
+    Candidate,
+    CandidateAssessment,
+    QueryAnalysis,
+    QueryClass,
+    QueryIntent,
+)
 from Core.ports import DecisionEngine
 from tool.laya_questions import (
     QUERY_CLASS_QUESTIONS,
+    article_type_questions,
     assessment_questions,
     injection_question,
+    query_analysis_questions,
+    relevance_questions,
 )
 
 logger = logging.getLogger(__name__)
@@ -79,6 +90,105 @@ class LayaDecisionEngine:
             )
             return await self._fallback.classify_query(query)
 
+    async def analyze_query(self, query: str) -> QueryAnalysis:
+        try:
+            result = await self._predict(
+                {"query": query}, query_analysis_questions()
+            )
+            answers = result["answers"]
+            try:
+                query_class = QueryClass(answers["query_class"]["choice"])
+            except ValueError:
+                query_class = QueryClass.OTHER
+            sensitivity = round(float(answers["time_sensitivity"]["score"]))
+            sensitivity = max(0, min(3, sensitivity))
+            try:
+                intent = QueryIntent(answers["intent"]["choice"])
+            except ValueError:
+                intent = QueryIntent.OTHER
+            try:
+                brief_schema = BriefSchema(answers["brief_schema"]["choice"])
+            except ValueError:
+                brief_schema = BriefSchema.GENERAL_BRIEF
+            return QueryAnalysis(
+                query_class=query_class,
+                time_sensitivity=sensitivity,
+                intent=intent,
+                brief_schema=brief_schema,
+            )
+        except Exception as error:
+            if self._fallback is None:
+                raise
+            logger.warning(
+                "laya analyze_query failed (%s); using fallback", type(error).__name__
+            )
+            return await self._fallback.analyze_query(query)
+
+    def _state(self, candidate: Candidate, query: str | None = None) -> dict:
+        state = {
+            "title": candidate.title,
+            "snippet": candidate.snippet or "",
+            "publisher": candidate.publisher or "",
+        }
+        if query is not None:
+            state["query"] = query
+        return state
+
+    async def relevance(
+        self, query: str, candidates: Sequence[Candidate]
+    ) -> list[float]:
+        if not candidates:
+            return []
+        questions = relevance_questions(query)
+        requests = [
+            {"state": self._state(candidate, query), "questions": questions}
+            for candidate in candidates
+        ]
+        try:
+            results = await self._predict_batch(requests)
+            if len(results) != len(candidates):
+                raise ValueError("laya returned a mismatched batch size")
+            return [
+                _clamp(float(result["answers"]["relevant"]["noul"]))
+                for result in results
+            ]
+        except Exception as error:
+            if self._fallback is None:
+                raise
+            logger.warning(
+                "laya relevance failed (%s); using fallback", type(error).__name__
+            )
+            return await self._fallback.relevance(query, candidates)
+
+    async def article_types(
+        self, candidates: Sequence[Candidate]
+    ) -> list[ArticleType]:
+        if not candidates:
+            return []
+        questions = article_type_questions()
+        requests = [
+            {"state": self._state(candidate), "questions": questions}
+            for candidate in candidates
+        ]
+        try:
+            results = await self._predict_batch(requests)
+            if len(results) != len(candidates):
+                raise ValueError("laya returned a mismatched batch size")
+            return [
+                ARTICLE_TYPES.get(
+                    result["answers"]["article_type"]["choice"],
+                    ArticleType.UNKNOWN,
+                )
+                for result in results
+            ]
+        except Exception as error:
+            if self._fallback is None:
+                raise
+            logger.warning(
+                "laya article_types failed (%s); using fallback", type(error).__name__
+            )
+            return await self._fallback.article_types(candidates)
+
     async def assess(
         self, query: str, candidates: Sequence[Candidate]
     ) -> list[CandidateAssessment]:
@@ -86,15 +196,7 @@ class LayaDecisionEngine:
             return []
         questions = assessment_questions(query)
         requests = [
-            {
-                "state": {
-                    "query": query,
-                    "title": candidate.title,
-                    "snippet": candidate.snippet or "",
-                    "publisher": candidate.publisher or "",
-                },
-                "questions": questions,
-            }
+            {"state": self._state(candidate, query), "questions": questions}
             for candidate in candidates
         ]
         try:

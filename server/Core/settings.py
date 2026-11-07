@@ -24,8 +24,8 @@ class Settings(BaseSettings):
 
     candidate_target: int = 60
     candidate_cap: int = 80
-    select_top: int = 20
-    fetch_max_reps: int = 8
+    select_top: int = 12
+    fetch_max_reps: int = 5
     extract_min_words: int = 120
     injection_threshold: float = 0.7
     fact_text_chars: int = 4000
@@ -83,6 +83,9 @@ class Settings(BaseSettings):
 
     future_date_tolerance_h: int = 1
     default_freshness_hours: int = 96
+    sensitivity_hours: list[int] = Field(
+        default_factory=lambda: [336, 168, 72, 24]
+    )
     drop_undated: bool = True
     freshness_by_class: dict[str, int] = Field(
         default_factory=lambda: {
@@ -163,7 +166,7 @@ class Settings(BaseSettings):
     high_risk_threshold: float = 0.8
     high_risk_cap: float = 40.0
 
-    pipeline_deadline_s: float = 90.0
+    pipeline_deadline_s: float = 120.0
 
     decision_engine: Literal["laya", "heuristic"] = "laya"
     laya_preload: bool = False
@@ -171,7 +174,8 @@ class Settings(BaseSettings):
     laya_default_model: str = "english"
     laya_max_loaded: int = 2
     laya_batch_size: int = 32
-    laya_assess_top: int = 20
+    laya_assess_top: int = 0
+    laya_type_top: int = 30
 
     generator_base_url: str = "https://api.openai.com/v1"
     generator_api_key: str = ""

@@ -84,17 +84,58 @@ async def test_orders_by_tier_when_relevance_is_equal(
 
 
 class FixedDecisions(HeuristicDecisionEngine):
-    def __init__(self, relevance: float):
-        self.relevance = relevance
+    def __init__(self, value: float):
+        self.value = value
+
+    async def relevance(self, query, candidates):
+        return [self.value for _ in candidates]
+
+    async def article_types(self, candidates):
+        return [ArticleType.REPORT for _ in candidates]
 
     async def assess(self, query, candidates):
         return [
             CandidateAssessment(
-                relevance=self.relevance,
+                relevance=self.value,
                 article_type=ArticleType.REPORT,
             )
             for _ in candidates
         ]
+
+
+class TypeSpy(HeuristicDecisionEngine):
+    def __init__(self) -> None:
+        self.types_called: list[str] = []
+
+    async def article_types(self, candidates):
+        self.types_called = [candidate.title for candidate in candidates]
+        return [ArticleType.REPORT for _ in candidates]
+
+
+async def test_article_types_only_top_n(
+    settings: Settings,
+    registry: SourceRegistry,
+) -> None:
+    candidates = [
+        make_candidate(
+            title=f"Gold story {index}",
+            url=f"https://www.example.com/gold-{index}",
+        )
+        for index in range(3)
+    ]
+    spy = TypeSpy()
+    ranked = await rank_candidates(
+        candidates,
+        plan=plan(),
+        decisions=spy,
+        settings=settings,
+        coverage=CoverageCollector(),
+        clock=StaticClock(NOW),
+        type_top=2,
+    )
+    assert len(ranked) == 3
+    assert len(spy.types_called) == 2
+    assert sum(candidate.article_type is None for candidate in ranked) == 1
 
 
 async def test_tier_aware_relevance_floor(
@@ -167,9 +208,9 @@ async def test_pre_rank_prefers_lexical_match(
         def __init__(self) -> None:
             self.assessed: list[str] = []
 
-        async def assess(self, query, candidates):
+        async def relevance(self, query, candidates):
             self.assessed = [candidate.title for candidate in candidates]
-            return await super().assess(query, candidates)
+            return await super().relevance(query, candidates)
 
     spy = SpyDecisions()
     gold = make_candidate(

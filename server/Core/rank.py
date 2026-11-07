@@ -4,7 +4,7 @@ import re
 from datetime import timedelta
 
 from Core.coverage import CoverageCollector
-from Core.models import Candidate, QueryPlan
+from Core.models import ArticleType, Candidate, QueryPlan
 from Core.ports import Clock, DecisionEngine
 from Core.settings import Settings
 
@@ -47,6 +47,29 @@ def _cheap_score(
     )
 
 
+def _final_score(
+    candidate: Candidate,
+    *,
+    weights: dict[str, float],
+    settings: Settings,
+    now,
+    window,
+) -> float:
+    article_type = candidate.article_type or ArticleType.UNKNOWN
+    type_weight = settings.type_weights.get(article_type.value, 0.9)
+    tier = settings.tier_scores.get(candidate.tier.value, 0.4)
+    if candidate.published_at is None:
+        recency = 1.0
+    else:
+        age = now - candidate.published_at
+        recency = _clamp(1.0 - age / window) if window.total_seconds() else 0.0
+    return _clamp(
+        weights["relevance"] * (candidate.relevance or 0.0) * type_weight
+        + weights["tier"] * tier
+        + weights["recency"] * recency
+    )
+
+
 async def rank_candidates(
     candidates: list[Candidate],
     *,
@@ -56,6 +79,7 @@ async def rank_candidates(
     coverage: CoverageCollector,
     clock: Clock,
     assess_top: int | None = None,
+    type_top: int | None = None,
 ) -> list[Candidate]:
     now = clock.now()
     window = timedelta(hours=plan.freshness_hours)
@@ -92,36 +116,43 @@ async def rank_candidates(
         coverage.add_drop("assess_cap", len(kept) - assess_top)
         kept = kept[:assess_top]
 
-    assessments = await decisions.assess(plan.normalized, kept)
+    relevances = await decisions.relevance(plan.normalized, kept)
     weights = settings.rank_weights
     scored: list[Candidate] = []
-    for candidate, assessment in zip(kept, assessments):
-        candidate.relevance = _clamp(assessment.relevance)
+    for candidate, relevance in zip(kept, relevances):
+        candidate.relevance = _clamp(relevance)
         threshold = settings.min_relevance_by_tier.get(
             candidate.tier.value, settings.min_candidate_relevance
         )
         if candidate.relevance < threshold:
             coverage.add_drop("low_relevance", backend=candidate.backend)
             continue
-        candidate.article_type = assessment.article_type
-        type_weight = settings.type_weights.get(assessment.article_type.value, 0.9)
-        effective_relevance = candidate.relevance * type_weight
-        tier = settings.tier_scores.get(candidate.tier.value, 0.4)
-        if candidate.published_at is None:
-            recency = 1.0
-        else:
-            age = now - candidate.published_at
-            recency = _clamp(1.0 - age / window) if window.total_seconds() else 0.0
-        candidate.score = _clamp(
-            weights["relevance"] * effective_relevance
-            + weights["tier"] * tier
-            + weights["recency"] * recency
+        candidate.article_type = None
+        candidate.score = _final_score(
+            candidate, weights=weights, settings=settings, now=now, window=window
         )
         scored.append(candidate)
-    kept = scored
 
-    kept.sort(key=lambda item: (item.score or 0.0, item.published_at or now), reverse=True)
-    if len(kept) > settings.select_top:
-        coverage.add_drop("rank_cap", len(kept) - settings.select_top)
-        kept = kept[: settings.select_top]
-    return kept
+    scored.sort(
+        key=lambda item: (item.score or 0.0, item.published_at or now),
+        reverse=True,
+    )
+
+    if type_top is not None and scored:
+        typed = scored[:type_top]
+        types = await decisions.article_types(typed)
+        for candidate, article_type in zip(typed, types):
+            candidate.article_type = article_type
+        for candidate in scored:
+            candidate.score = _final_score(
+                candidate, weights=weights, settings=settings, now=now, window=window
+            )
+        scored.sort(
+            key=lambda item: (item.score or 0.0, item.published_at or now),
+            reverse=True,
+        )
+
+    if len(scored) > settings.select_top:
+        coverage.add_drop("rank_cap", len(scored) - settings.select_top)
+        scored = scored[: settings.select_top]
+    return scored

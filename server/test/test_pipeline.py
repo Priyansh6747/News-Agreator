@@ -65,9 +65,9 @@ async def test_pipeline_end_to_end(
 
 async def test_deadline_marks_coverage_unavailable(registry: SourceRegistry) -> None:
     class SlowDecisions(HeuristicDecisionEngine):
-        async def assess(self, query, candidates):
+        async def relevance(self, query, candidates):
             await asyncio.sleep(0.2)
-            return await super().assess(query, candidates)
+            return await super().relevance(query, candidates)
 
     config = Settings(_env_file=None, app_env="demo", pipeline_deadline_s=0.01)
     pipeline = Pipeline(

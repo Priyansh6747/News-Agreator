@@ -36,10 +36,15 @@ async def plan_query(
     settings: Settings,
 ) -> QueryPlan:
     normalized = " ".join(query.split())
-    query_class = await decisions.classify_query(normalized)
-    freshness = settings.freshness_by_class.get(
-        query_class.value, settings.default_freshness_hours
-    )
+    analysis = await decisions.analyze_query(normalized)
+    query_class = analysis.query_class
+    if settings.sensitivity_hours:
+        index = min(analysis.time_sensitivity, len(settings.sensitivity_hours) - 1)
+        freshness = settings.sensitivity_hours[index]
+    else:
+        freshness = settings.freshness_by_class.get(
+            query_class.value, settings.default_freshness_hours
+        )
     phrasings = expand_phrasings(normalized, query_class, settings.query_phrasings)
     domains = registry.tier1_2_domains(limit=settings.site_scoped_queries)
     site_scoped = [f"{normalized} site:{domain}" for domain in domains]
@@ -47,6 +52,9 @@ async def plan_query(
         query=query,
         normalized=normalized,
         query_class=query_class,
+        time_sensitivity=analysis.time_sensitivity,
+        intent=analysis.intent,
+        brief_schema=analysis.brief_schema,
         freshness_hours=freshness,
         phrasings=phrasings,
         site_scoped=site_scoped,
