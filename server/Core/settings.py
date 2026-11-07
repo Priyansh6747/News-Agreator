@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     candidate_cap: int = 80
     select_top: int = 20
     fetch_max_reps: int = 8
+    extract_min_words: int = 120
+    injection_threshold: float = 0.7
+    fact_text_chars: int = 8000
+    fact_max_tokens: int = 1024
+    robots_cache_ttl_s: int = 86400
 
     fetch_concurrency: int = 4
     per_domain_concurrency: int = 1

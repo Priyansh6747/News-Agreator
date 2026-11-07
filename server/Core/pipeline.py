@@ -193,6 +193,7 @@ class Pipeline:
                 started = perf_counter()
                 clusters = await enrich_clusters(
                     clusters,
+                    query=query,
                     resolver=self.resolver,
                     fetcher=self.fetcher,
                     extractor=self.extractor,
