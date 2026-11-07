@@ -16,9 +16,11 @@ BRIEF_SYSTEM = (
 )
 
 FACT_SYSTEM = (
-    "You extract verifiable facts from one news article. Return only claims stated in "
-    "the text, with the number or value that carries the claim. Keep quotes at or under "
-    "25 words. Do not infer, summarize opinion as fact, or add external knowledge."
+    "You extract verifiable facts from one news article. Return 3 to 5 concrete facts. "
+    "Each fact must include the number, percentage, date, or amount that carries the claim, "
+    "and a verbatim quote of at most 25 words. Do not return an empty list when the text "
+    "contains prices, percentages, dates, or named events. Do not infer or add external "
+    "knowledge."
 )
 
 

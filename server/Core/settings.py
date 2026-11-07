@@ -169,6 +169,8 @@ class Settings(BaseSettings):
     generator_model: str = ""
     generator_timeout_s: float = 60.0
     generator_max_tokens: int = 1600
+    generator_temperature: float = 0.2
+    generator_retry_base_s: float = 1.0
 
 
 @lru_cache(maxsize=1)

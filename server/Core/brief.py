@@ -11,6 +11,7 @@ from Core.models import (
     Position,
     QueryPlan,
     StoryCluster,
+    TextStatus,
     TimelineEntry,
     validate_http_url,
 )
@@ -142,18 +143,38 @@ def _fallback(
         for member in cluster.members
         if member.candidate.publisher
     }
+    has_text = any(
+        member.text_status is TextStatus.OK
+        for cluster in clusters
+        for member in cluster.members
+    )
     if clusters:
-        answer = (
-            f"{len(clusters)} stories from {len(publishers)} publishers were ranked for "
-            f"'{query}'. Article text was not read in this build, so the brief is limited "
-            "to headlines and source metadata."
-        )
+        if key_facts:
+            answer = (
+                f"{len(clusters)} stories from {len(publishers)} publishers; "
+                f"{len(key_facts)} key facts were extracted for '{query}'."
+            )
+        elif has_text:
+            answer = (
+                f"{len(clusters)} stories from {len(publishers)} publishers were ranked "
+                f"for '{query}'. Article text was read, but fact extraction returned no "
+                "structured facts."
+            )
+        else:
+            answer = (
+                f"{len(clusters)} stories from {len(publishers)} publishers were ranked for "
+                f"'{query}'. Article text was not read in this build, so the brief is limited "
+                "to headlines and source metadata."
+            )
     else:
         answer = f"No stories were found for '{query}'."
 
     thin: list[str] = []
     if not key_facts:
-        thin.append("No article text was read; no key facts were extracted.")
+        if has_text:
+            thin.append("Article text was read, but no structured facts were extracted.")
+        else:
+            thin.append("No article text was read; no key facts were extracted.")
     status = coverage.finish().status
     if status is not CoverageStatus.COMPLETE:
         thin.append(f"Coverage is {status.value}.")
@@ -202,7 +223,9 @@ async def build_brief(
                 )
             coverage.note("generator returned an empty answer; using fallback")
         except Exception as error:  # noqa: BLE001
-            coverage.note(f"generator unavailable: {type(error).__name__}")
+            coverage.note(
+                f"generator unavailable: {type(error).__name__}: {str(error)[:300]}"
+            )
 
     return _fallback(
         query=query,

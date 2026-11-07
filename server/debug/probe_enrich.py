@@ -9,7 +9,6 @@ from pathlib import Path
 async def run(url: str) -> None:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-    from Core.pipeline import SystemClock
     from Core.registry import SourceRegistry
     from Core.settings import Settings
     from tool.article_fetch import HtmlArticleFetcher
@@ -19,7 +18,6 @@ async def run(url: str) -> None:
 
     settings = Settings(app_env="dev")
     registry = SourceRegistry.load()
-    clock = SystemClock()
     http = HttpClient(settings)
     resolver = GoogleNewsLinkResolver(http)
     fetcher = HtmlArticleFetcher(http, registry, settings)
@@ -39,7 +37,7 @@ async def run(url: str) -> None:
         print(f"text:     {extracted.word_count} words, quality {extracted.quality:.2f}")
         print("---")
         print(extracted.text[:500])
-    except Exception as error:
+    except Exception as error:  # noqa: BLE001
         print(f"failed:   {type(error).__name__}: {error}")
     finally:
         await http.aclose()

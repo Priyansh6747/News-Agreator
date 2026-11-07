@@ -170,7 +170,7 @@ async def _enrich_cluster(
         _set_status(representative, TextStatus.OK, coverage)
         coverage.note(
             f"fact extraction failed {representative.canonical_url}: "
-            f"{type(error).__name__}"
+            f"{type(error).__name__}: {str(error)[:300]}"
         )
         return
 

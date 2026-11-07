@@ -356,7 +356,7 @@ async def test_unselected_clusters_are_not_fetched(
     registry: SourceRegistry,
     clock: StaticClock,
 ) -> None:
-    config = Settings(app_env="demo", fetch_max_reps=1)
+    config = Settings(_env_file=None, app_env="demo", fetch_max_reps=1)
     first = cluster_for(registry, config, url="https://www.bbc.com/news/gold")
     second = cluster_for(
         registry,

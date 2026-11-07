@@ -69,7 +69,7 @@ async def test_deadline_marks_coverage_unavailable(registry: SourceRegistry) -> 
             await asyncio.sleep(0.2)
             return await super().assess(query, candidates)
 
-    config = Settings(app_env="demo", pipeline_deadline_s=0.01)
+    config = Settings(_env_file=None, app_env="demo", pipeline_deadline_s=0.01)
     pipeline = Pipeline(
         backends=[FixtureSearchBackend(backend, NOW) for backend in Backend],
         decisions=SlowDecisions(),

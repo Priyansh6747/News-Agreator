@@ -7,7 +7,7 @@ URL ?=
 
 .DEFAULT_GOAL := help
 
-.PHONY: help sync sync-base lock test lint check run demo eval probe-sources probe-clusters probe-enrich demo-brief
+.PHONY: help sync sync-base lock test lint check run demo eval probe-sources probe-clusters probe-enrich probe-generator demo-brief
 
 help: ## Show the available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -47,6 +47,9 @@ probe-clusters: ## Cluster all live candidates for a query
 probe-enrich: ## Resolve/fetch/extract one URL (usage: make probe-enrich URL=...)
 	@test -n "$(URL)" || (echo "usage: make probe-enrich URL=<url>"; exit 1)
 	uv run python debug/probe_enrich.py "$(URL)"
+
+probe-generator: ## Ping the configured generator with a tiny JSON schema
+	uv run python debug/probe_generator.py
 
 demo-brief: ## Run the fixture pipeline and print a brief
 	uv run python debug/demo_brief.py "$(QUERY)"

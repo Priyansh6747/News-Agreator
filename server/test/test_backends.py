@@ -25,7 +25,7 @@ def settings(**overrides) -> Settings:
         "query_cache_ttl_s": 0,
     }
     defaults.update(overrides)
-    return Settings(**defaults)
+    return Settings(_env_file=None, **defaults)
 
 
 def http(handler, config: Settings) -> HttpClient:
