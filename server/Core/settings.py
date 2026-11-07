@@ -97,6 +97,14 @@ class Settings(BaseSettings):
     cluster_inverted_index_cap: int = 250
     syndication_containment: float = 0.85
     min_corroborating_families: int = 2
+    cluster_dims: int = 512
+    cluster_token_weight: float = 2.0
+    cluster_bigram_weight: float = 1.5
+    cluster_char_weight: float = 1.0
+    cluster_entity_boost: float = 3.0
+    cluster_number_boost: float = 2.0
+    cluster_min_lead_words: int = 12
+    cluster_min_shared_tokens: int = 2
 
     rank_weights: dict[str, float] = Field(
         default_factory=lambda: {"relevance": 0.45, "tier": 0.30, "recency": 0.25}
