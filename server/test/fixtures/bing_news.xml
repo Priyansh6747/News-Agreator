@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:News="https://www.bing.com/news">
+  <channel>
+    <title>Bing News</title>
+    <link>https://www.bing.com/news</link>
+    <item>
+      <title>Gold price forecast: what analysts expect</title>
+      <link>http://www.bing.com/news/apiclick.aspx?ref=FexRss&amp;url=https%3A%2F%2Fwww.cnbc.com%2F2026%2F11%2F06%2Fgold-price-forecast.html</link>
+      <pubDate>Fri, 06 Nov 2026 08:00:00 GMT</pubDate>
+      <description>Analysts expect gold to stay supported as the dollar softens into the next Fed meeting.</description>
+      <News:Source>CNBC</News:Source>
+    </item>
+  </channel>
+</rss>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Google News</title>
+    <link>https://news.google.com</link>
+    <item>
+      <title>Gold climbs as dollar softens - Reuters</title>
+      <link>https://news.google.com/rss/articles/CBMiGoldFed</link>
+      <pubDate>Fri, 06 Nov 2026 10:30:00 GMT</pubDate>
+      <description><![CDATA[<a href="https://news.google.com/rss/articles/CBMiGoldFed">Gold climbs as dollar softens</a>&nbsp;&nbsp;<font color="#6f6f6f">Reuters</font>]]></description>
+      <source url="https://www.reuters.com">Reuters</source>
+    </item>
+    <item>
+      <title>Gold prices steady as investors weigh rate path - BBC News</title>
+      <link>https://news.google.com/rss/articles/CBMiGoldBBC</link>
+      <pubDate>Fri, 06 Nov 2026 09:15:00 GMT</pubDate>
+      <description><![CDATA[<a href="https://news.google.com/rss/articles/CBMiGoldBBC">Gold prices steady as investors weigh rate path</a>&nbsp;&nbsp;<font color="#6f6f6f">BBC News</font>]]></description>
+      <source url="https://www.bbc.com">BBC News</source>
+    </item>
+  </channel>
+</rss>

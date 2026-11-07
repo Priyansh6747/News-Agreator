@@ -1,0 +1,38 @@
+[project]
+name = "server"
+version = "0.1.0"
+description = "NewsAggreator compute backend"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.162.0",
+    "feedparser>=6.0.11",
+    "httpx>=0.28.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "sse-starlette>=3.0.0",
+    "uvicorn>=0.54.0",
+]
+
+[project.optional-dependencies]
+laya = ["laya>=0.4.26,<0.5"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.7.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["test"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint.per-file-ignores]
+"Core/__init__.py" = ["N999"]

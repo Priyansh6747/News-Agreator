@@ -1,0 +1,13 @@
+{
+  "domains": [
+    {"domain": "reuters.com", "mode": "skip", "reason": "robots.txt disallows all crawling", "evidence": "https://www.reuters.com/robots.txt (measured 2026-11-05)"},
+    {"domain": "ft.com", "mode": "snippet_only", "reason": "article fetch blocked", "evidence": "HTTP 401/403 from residential IP (2026-11-05)"},
+    {"domain": "nytimes.com", "mode": "snippet_only", "reason": "article fetch blocked", "evidence": "HTTP 401/403 from residential IP (2026-11-05)"},
+    {"domain": "sky.com", "mode": "snippet_only", "reason": "article fetch blocked", "evidence": "HTTP 403 from residential IP (2026-11-05)"},
+    {"domain": "scmp.com", "mode": "snippet_only", "reason": "metered paywall", "evidence": "paywall markers observed (2026-11-05)"},
+    {"domain": "lemonde.fr", "mode": "snippet_only", "reason": "metered, personal-use terms", "evidence": "subscription boilerplate observed (2026-11-05)"},
+    {"domain": "wsj.com", "mode": "snippet_only", "reason": "paywall", "evidence": "known paywall (not measured)"},
+    {"domain": "washingtonpost.com", "mode": "snippet_only", "reason": "paywall", "evidence": "known paywall (not measured)"},
+    {"domain": "bloomberg.com", "mode": "snippet_only", "reason": "paywall", "evidence": "known paywall (not measured)"}
+  ]
+}

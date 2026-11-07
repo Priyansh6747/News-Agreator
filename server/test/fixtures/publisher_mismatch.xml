@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Feed with a foreign link</title>
+    <link>https://www.bbc.com/news</link>
+    <item>
+      <title>Syndicated elsewhere</title>
+      <link>https://evil.example.com/story</link>
+      <pubDate>Fri, 06 Nov 2026 09:30:00 GMT</pubDate>
+      <description>This link does not belong to the claimed publisher and must be rejected.</description>
+    </item>
+  </channel>
+</rss>

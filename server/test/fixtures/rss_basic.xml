@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>BBC World</title>
+    <link>https://www.bbc.com/news</link>
+    <item>
+      <title>Gold rises &amp; dollar slips</title>
+      <link>https://www.bbc.com/news/business-1?utm_source=rss&amp;utm_medium=feed</link>
+      <pubDate>Fri, 06 Nov 2026 10:00:00 GMT</pubDate>
+      <description><![CDATA[<p>Gold prices rose on Friday as the dollar softened against major peers.</p>]]></description>
+    </item>
+    <item>
+      <title>Undated story</title>
+      <link>https://www.bbc.com/news/undated</link>
+      <description>No date here, so the strict date gate must drop this item.</description>
+    </item>
+    <item>
+      <title>Future story</title>
+      <link>https://www.bbc.com/news/future</link>
+      <pubDate>Sun, 08 Nov 2026 10:00:00 GMT</pubDate>
+      <description>A story dated two days in the future should be dropped by the gate.</description>
+    </item>
+    <item>
+      <title>Click counter</title>
+      <link>https://www.bbc.com/click?*https://www.bbc.com/news/real-story</link>
+      <pubDate>Fri, 06 Nov 2026 09:00:00 GMT</pubDate>
+      <description>This link has a publisher click counter that must be unwrapped first.</description>
+    </item>
+  </channel>
+</rss>

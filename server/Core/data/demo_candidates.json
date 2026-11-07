@@ -1,0 +1,130 @@
+{
+  "items": [
+    {
+      "backend": "google_news",
+      "title": "Gold climbs as dollar softens ahead of Fed decision",
+      "url": "https://news.google.com/rss/articles/CBMiGoldFed",
+      "publisher": "Reuters",
+      "snippet": null,
+      "age_hours": 2,
+      "needs_resolution": true
+    },
+    {
+      "backend": "google_news",
+      "title": "Gold prices steady as investors weigh rate path",
+      "url": "https://news.google.com/rss/articles/CBMiGoldBBC",
+      "publisher": "BBC News",
+      "snippet": null,
+      "age_hours": 5,
+      "needs_resolution": true
+    },
+    {
+      "backend": "google_news",
+      "title": "Oil slides on demand worries",
+      "url": "https://news.google.com/rss/articles/CBMiOilCNBC",
+      "publisher": "CNBC",
+      "snippet": null,
+      "age_hours": 3,
+      "needs_resolution": true
+    },
+    {
+      "backend": "bing_news",
+      "title": "Gold price forecast: what analysts expect",
+      "url": "https://www.cnbc.com/2026/11/06/gold-price-forecast.html",
+      "publisher": null,
+      "snippet": "Analysts expect gold to stay supported as the dollar softens and real yields drift lower into the next Fed meeting.",
+      "age_hours": 4,
+      "needs_resolution": false
+    },
+    {
+      "backend": "bing_news",
+      "title": "Dollar weakens as traders eye Fed cut",
+      "url": "https://www.reuters.com/markets/currencies/dollar-weakens-2026-11-06/",
+      "publisher": null,
+      "snippet": "The dollar slipped against major peers as traders priced in a higher chance of a rate cut next year.",
+      "age_hours": 2,
+      "needs_resolution": false
+    },
+    {
+      "backend": "bing_news",
+      "title": "Gold rush: central banks keep buying",
+      "url": "https://www.aljazeera.com/economy/2026/11/6/central-banks-gold",
+      "publisher": null,
+      "snippet": "Central banks added gold reserves for a third straight month, supporting prices even as retail demand cooled.",
+      "age_hours": 10,
+      "needs_resolution": false
+    },
+    {
+      "backend": "gdelt",
+      "title": "Gold prices rise amid geopolitical tensions",
+      "url": "https://www.aljazeera.com/economy/2026/11/5/gold-prices-rise",
+      "publisher": "Al Jazeera",
+      "snippet": null,
+      "age_hours": 7,
+      "needs_resolution": false
+    },
+    {
+      "backend": "gdelt",
+      "title": "Central banks add gold for a third month",
+      "url": "https://www.reuters.com/markets/commodities/central-banks-gold-2026-11-05/",
+      "publisher": "Reuters",
+      "snippet": null,
+      "age_hours": 12,
+      "needs_resolution": false
+    },
+    {
+      "backend": "publisher_rss",
+      "title": "Gold hits two-week high as dollar slips",
+      "url": "https://www.reuters.com/markets/commodities/gold-two-week-high-2026-11-06/",
+      "publisher": "Reuters",
+      "snippet": "Gold rose to a two-week high on Thursday as the dollar eased, with traders focused on the Federal Reserve's next move.",
+      "age_hours": 1,
+      "needs_resolution": false
+    },
+    {
+      "backend": "publisher_rss",
+      "title": "Markets live: gold, oil and the dollar",
+      "url": "https://www.theguardian.com/business/live/2026/nov/06/markets-live-gold-oil-dollar",
+      "publisher": "The Guardian",
+      "snippet": "Live coverage of global markets as gold extends gains, oil retreats, and currency traders position for a softer dollar.",
+      "age_hours": 4,
+      "needs_resolution": false
+    },
+    {
+      "backend": "publisher_rss",
+      "title": "Fed holds rates steady, signals patience",
+      "url": "https://www.bbc.com/news/business-2026-11-06",
+      "publisher": "BBC News",
+      "snippet": "The Federal Reserve left rates unchanged and said it needs more evidence before adjusting policy.",
+      "age_hours": 6,
+      "needs_resolution": false
+    },
+    {
+      "backend": "publisher_rss",
+      "title": "Stocks slip as bond yields climb",
+      "url": "https://www.theguardian.com/business/2026/nov/05/stocks-slip",
+      "publisher": "The Guardian",
+      "snippet": "Equities fell as bond yields rose, with investors weighing the path for interest rates.",
+      "age_hours": 30,
+      "needs_resolution": false
+    },
+    {
+      "backend": "publisher_rss",
+      "title": "Gold forecast: metals week ahead",
+      "url": "https://www.cnbc.com/2026/11/04/gold-week-ahead.html",
+      "publisher": "CNBC",
+      "snippet": "A look at the week ahead for metals, including gold, silver and copper.",
+      "age_hours": 50,
+      "needs_resolution": false
+    },
+    {
+      "backend": "publisher_rss",
+      "title": "Archive: gold commentary from last month",
+      "url": "https://www.theguardian.com/business/2026/oct/01/gold-commentary",
+      "publisher": "The Guardian",
+      "snippet": "Older commentary on the gold market.",
+      "age_hours": 120,
+      "needs_resolution": false
+    }
+  ]
+}

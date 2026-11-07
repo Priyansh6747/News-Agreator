@@ -1,0 +1,14 @@
+{
+  "feeds": [
+    {"publisher": "BBC News", "domain": "bbc.com", "url": "https://feeds.bbci.co.uk/news/world/rss.xml", "section": "world"},
+    {"publisher": "BBC News", "domain": "bbc.com", "url": "https://feeds.bbci.co.uk/news/business/rss.xml", "section": "business"},
+    {"publisher": "The Guardian", "domain": "theguardian.com", "url": "https://www.theguardian.com/world/rss", "section": "world"},
+    {"publisher": "The Guardian", "domain": "theguardian.com", "url": "https://www.theguardian.com/uk/business/rss", "section": "business"},
+    {"publisher": "Al Jazeera", "domain": "aljazeera.com", "url": "https://www.aljazeera.com/xml/rss/all.xml", "section": "all"},
+    {"publisher": "The New York Times", "domain": "nytimes.com", "url": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml", "section": "world"},
+    {"publisher": "NPR", "domain": "npr.org", "url": "https://feeds.npr.org/1001/rss.xml", "section": "news"},
+    {"publisher": "The Verge", "domain": "theverge.com", "url": "https://www.theverge.com/rss/index.xml", "section": "tech"},
+    {"publisher": "Ars Technica", "domain": "arstechnica.com", "url": "https://feeds.arstechnica.com/arstechnica/index", "section": "tech"},
+    {"publisher": "CNBC", "domain": "cnbc.com", "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html", "section": "markets"}
+  ]
+}
