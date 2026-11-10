@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
@@ -12,7 +12,11 @@ BRIEF_SYSTEM = (
     "Use only the cluster ids supplied by the user. Never invent a URL, publisher, date, "
     "or fact. Every timeline entry, key fact, and position must cite one cluster id from "
     "the input. A disagreement needs at least two positions from different cluster ids. "
-    "If the evidence is thin, say so in thin_sourcing instead of guessing."
+    "Clusters marked background: true are older than the current news window; use them "
+    "for timeline, history, and comparison context only, and never present their figures "
+    "as current. The timeline must include background clusters when any are supplied, so "
+    "it covers more than today. If the evidence is thin, say so in thin_sourcing instead "
+    "of guessing."
 )
 
 FACT_SYSTEM = (
@@ -99,10 +103,15 @@ class ExtractedFacts(BaseModel):
         return value
 
 
-def _cluster_payload(cluster: StoryCluster) -> dict[str, object]:
+def _cluster_payload(
+    cluster: StoryCluster,
+    *,
+    background: bool = False,
+) -> dict[str, object]:
     return {
         "cluster_id": cluster.id,
         "headline": cluster.headline,
+        "background": background,
         "publishers": sorted(
             {member.candidate.publisher for member in cluster.members if member.candidate.publisher}
         ),
@@ -127,8 +136,26 @@ def build_brief_prompt(
     query: str,
     clusters: list[StoryCluster],
     brief_schema: str | None = None,
+    *,
+    now: datetime | None = None,
+    freshness_hours: int | None = None,
 ) -> str:
-    payload = [_cluster_payload(cluster) for cluster in clusters]
+    cutoff = (
+        now - timedelta(hours=freshness_hours)
+        if now is not None and freshness_hours is not None
+        else None
+    )
+    payload = [
+        _cluster_payload(
+            cluster,
+            background=(
+                cutoff is not None
+                and cluster.last_seen is not None
+                and cluster.last_seen < cutoff
+            ),
+        )
+        for cluster in clusters
+    ]
     schema_line = f"Preferred brief schema: {brief_schema}\n" if brief_schema else ""
     return (
         f"Query: {query}\n"

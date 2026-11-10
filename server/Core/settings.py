@@ -41,12 +41,18 @@ class Settings(BaseSettings):
     http_user_agent: str = "NewsAgreator/0.1"
     http_max_redirects: int = 3
 
+    context_lookback_hours: int = 720
+    context_top: int = 4
+    context_candidate_share: float = 0.25
+
     google_news_max_queries: int = 4
-    google_news_item_cap: int = 60
+    google_news_item_cap: int = 100
     bing_news_max_queries: int = 2
-    bing_news_item_cap: int = 20
-    publisher_feed_item_cap: int = 20
-    gdelt_max_records: int = 75
+    bing_news_item_cap: int = 100
+    publisher_feed_item_cap: int = 100
+    gdelt_max_records: int = 250
+    gdelt_window_days: int = 7
+    gdelt_max_requests: int = 3
     gdelt_timeout_s: float = 20.0
     gdelt_cooldown_s: int = 900
     publisher_feed_stopwords: list[str] = Field(
@@ -185,6 +191,13 @@ class Settings(BaseSettings):
     generator_temperature: float = 0.2
     generator_retry_base_s: float = 1.0
     generator_concurrency: int = 1
+
+    presenter_enabled: bool = True
+    presenter_max_charts: int = 5
+    presenter_max_locations: int = 8
+    presenter_timeout_s: float = 30.0
+    presenter_text_chars: int = 7000
+    presenter_max_tokens: int = 1400
 
 
 @lru_cache(maxsize=1)

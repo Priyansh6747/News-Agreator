@@ -37,17 +37,30 @@ def test_parses_items_and_applies_date_gate(now) -> None:
     assert by_title["Click counter"].url == "https://bbc.com/news/real-story"
 
 
-def test_item_cap_counts_feed_cap(now) -> None:
+def test_item_cap_counts_only_in_window_items(now) -> None:
     result = parse_feed(
         read("rss_basic.xml"),
         backend=Backend.PUBLISHER_RSS,
-        max_items=2,
+        max_items=1,
         now=now,
         publisher_domain="bbc.com",
     )
-    assert len(result.items) == 1
-    assert result.drops["feed_cap"] == 2
+    assert [item.title for item in result.items] == ["Gold rises & dollar slips"]
+    assert result.drops["feed_cap"] == 1
     assert result.drops["undated"] == 1
+
+
+def test_oldest_cutoff_keeps_feed_history(now) -> None:
+    result = parse_feed(
+        read("rss_basic.xml"),
+        backend=Backend.PUBLISHER_RSS,
+        max_items=20,
+        now=now,
+        publisher_domain="bbc.com",
+        oldest=now.replace(hour=9, minute=30, second=0),
+    )
+    assert [item.title for item in result.items] == ["Gold rises & dollar slips"]
+    assert result.drops == {"undated": 1, "future_date": 1, "too_old": 1}
 
 
 def test_html_challenge_is_rejected(now) -> None:

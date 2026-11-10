@@ -56,6 +56,7 @@ async def run(query: str, backend_names: list[str] | None) -> None:
         registry=registry,
         settings=settings,
         coverage=coverage,
+        clock=clock,
     )
     ranked = await rank_candidates(
         candidates,
@@ -69,7 +70,10 @@ async def run(query: str, backend_names: list[str] | None) -> None:
     report = coverage.finish()
 
     print(f"query: {plan.normalized}")
-    print(f"class: {plan.query_class.value}  freshness: {plan.freshness_hours}h")
+    print(
+        f"class: {plan.query_class.value}  freshness: {plan.freshness_hours}h  "
+        f"lookback: {plan.lookback}h"
+    )
     print(f"candidates: {len(candidates)}  selected: {len(ranked)}  total: {elapsed:.2f}s")
     print("\nbackends:")
     for attempt in report.attempts:

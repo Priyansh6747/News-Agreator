@@ -4,8 +4,9 @@ import re
 from datetime import timedelta
 
 from Core.coverage import CoverageCollector
+from Core.items import select_with_context
 from Core.models import ArticleType, Candidate, QueryPlan
-from Core.ports import Clock, DecisionEngine
+from Core.ports import Clock, DecisionEngine, ProgressCallback
 from Core.settings import Settings
 
 
@@ -80,11 +81,14 @@ async def rank_candidates(
     clock: Clock,
     assess_top: int | None = None,
     type_top: int | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> list[Candidate]:
+    step_total = 2 if type_top is not None else 1
     now = clock.now()
     window = timedelta(hours=plan.freshness_hours)
+    fresh_cutoff = now - window
     future_limit = now + timedelta(hours=settings.future_date_tolerance_h)
-    oldest = now - window
+    oldest = now - timedelta(hours=plan.lookback)
 
     kept: list[Candidate] = []
     for candidate in candidates:
@@ -117,6 +121,8 @@ async def rank_candidates(
         kept = kept[:assess_top]
 
     relevances = await decisions.relevance(plan.normalized, kept)
+    if on_progress is not None:
+        await on_progress(1, step_total)
     weights = settings.rank_weights
     scored: list[Candidate] = []
     for candidate, relevance in zip(kept, relevances):
@@ -151,8 +157,34 @@ async def rank_candidates(
             key=lambda item: (item.score or 0.0, item.published_at or now),
             reverse=True,
         )
+        if on_progress is not None:
+            await on_progress(2, step_total)
 
-    if len(scored) > settings.select_top:
-        coverage.add_drop("rank_cap", len(scored) - settings.select_top)
-        scored = scored[: settings.select_top]
-    return scored
+    fresh = [
+        candidate
+        for candidate in scored
+        if candidate.published_at is None or candidate.published_at >= fresh_cutoff
+    ]
+    context = [
+        candidate
+        for candidate in scored
+        if candidate.published_at is not None and candidate.published_at < fresh_cutoff
+    ]
+    fresh_take = fresh[: settings.select_top]
+    context_room = (
+        settings.select_top - len(fresh_take)
+        if len(fresh_take) < settings.select_top
+        else max(0, settings.context_top)
+    )
+    context_take = select_with_context(
+        context,
+        limit=context_room,
+        now=now,
+        freshness_hours=0,
+        context_share=1.0,
+    )
+    if len(fresh) > len(fresh_take):
+        coverage.add_drop("rank_cap", len(fresh) - len(fresh_take))
+    if len(context) > len(context_take):
+        coverage.add_drop("context_cap", len(context) - len(context_take))
+    return fresh_take + context_take

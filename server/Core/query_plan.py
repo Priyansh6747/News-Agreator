@@ -45,6 +45,7 @@ async def plan_query(
         freshness = settings.freshness_by_class.get(
             query_class.value, settings.default_freshness_hours
         )
+    lookback = max(freshness, settings.context_lookback_hours)
     phrasings = expand_phrasings(normalized, query_class, settings.query_phrasings)
     domains = registry.tier1_2_domains(limit=settings.site_scoped_queries)
     site_scoped = [f"{normalized} site:{domain}" for domain in domains]
@@ -56,6 +57,7 @@ async def plan_query(
         intent=analysis.intent,
         brief_schema=analysis.brief_schema,
         freshness_hours=freshness,
+        lookback_hours=lookback,
         phrasings=phrasings,
         site_scoped=site_scoped,
     )

@@ -11,8 +11,9 @@ from Core.errors import (
     BackendRateLimited,
     BackendTimeout,
 )
+from Core.items import select_with_context
 from Core.models import Attempt, Backend, Candidate, QueryPlan, RawItem, SearchResult
-from Core.ports import SearchBackend
+from Core.ports import Clock, ProgressCallback, SearchBackend
 from Core.registry import SourceRegistry
 from Core.settings import Settings
 from Core.urls import canonical_url, domain_of, normalize_title
@@ -102,12 +103,25 @@ async def retrieve_candidates(
     registry: SourceRegistry,
     settings: Settings,
     coverage: CoverageCollector,
+    clock: Clock,
+    on_progress: ProgressCallback | None = None,
 ) -> list[Candidate]:
     started = perf_counter()
-    tasks = [
-        asyncio.create_task(backend.search(plan, limit=settings.candidate_cap))
-        for backend in backends
-    ]
+    completed = 0
+    total = len(backends)
+    lock = asyncio.Lock()
+
+    async def run(backend: SearchBackend) -> SearchResult:
+        nonlocal completed
+        try:
+            return await backend.search(plan, limit=settings.candidate_cap)
+        finally:
+            if on_progress is not None:
+                async with lock:
+                    completed += 1
+                    await on_progress(completed, total)
+
+    tasks = [asyncio.create_task(run(backend)) for backend in backends]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     merged: dict[str, Candidate] = {}
@@ -170,6 +184,13 @@ async def retrieve_candidates(
         seen.add(id(candidate))
         candidates.append(candidate)
     if len(candidates) > settings.candidate_cap:
-        coverage.add_drop("cap", len(candidates) - settings.candidate_cap)
-        candidates = candidates[: settings.candidate_cap]
+        selected = select_with_context(
+            candidates,
+            limit=settings.candidate_cap,
+            now=clock.now(),
+            freshness_hours=plan.freshness_hours,
+            context_share=settings.context_candidate_share,
+        )
+        coverage.add_drop("cap", len(candidates) - len(selected))
+        candidates = selected
     return candidates

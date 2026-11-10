@@ -120,6 +120,41 @@ def gdelt_payload() -> bytes:
     ).encode()
 
 
+async def test_google_news_requests_the_lookback_window() -> None:
+    urls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        urls.append(str(request.url))
+        return httpx.Response(200, content=fixture("google_news.xml"))
+
+    config = settings(google_news_max_queries=1)
+    client = http(handler, config)
+    backend = GoogleNewsBackend(client, config, StaticClock(NOW))
+    await backend.search(plan(lookback_hours=720), limit=20)
+    assert len(urls) == 1
+    assert "when%3A30d" in urls[0]
+    await client.aclose()
+
+
+async def test_gdelt_walks_the_lookback_window() -> None:
+    urls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        urls.append(str(request.url))
+        return httpx.Response(200, content=json.dumps({"articles": []}).encode())
+
+    config = settings(gdelt_window_days=7, gdelt_max_requests=5)
+    client = http(handler, config)
+    backend = GdeltBackend(client, config, SourceRegistry.load(), StaticClock(NOW))
+    result = await backend.search(
+        plan(freshness_hours=24, lookback_hours=192), limit=20
+    )
+    assert len(urls) == 2
+    assert all("startdatetime=" in url and "enddatetime=" in url for url in urls)
+    assert result.items == []
+    await client.aclose()
+
+
 async def test_gdelt_filters_language_and_undated() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=gdelt_payload())

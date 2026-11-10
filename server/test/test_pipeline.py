@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 
 from Core.models import (
     Backend,
@@ -48,7 +49,11 @@ async def test_pipeline_end_to_end(
     assert brief.stories
     assert brief.timeline
     assert brief.coverage.status is CoverageStatus.COMPLETE
-    assert brief.coverage.drops["out_of_window"] == 2
+    assert "out_of_window" not in brief.coverage.drops
+    assert any(
+        story.last_seen is not None and story.last_seen < NOW - timedelta(hours=24)
+        for story in brief.stories
+    )
 
     finished = [event.stage for event in sink.events if event.state is EventState.FINISHED]
     assert finished == [
@@ -59,7 +64,25 @@ async def test_pipeline_end_to_end(
         Stage.SCORE,
         Stage.ENRICH,
         Stage.BRIEF,
+        Stage.PRESENT,
     ]
+
+    assert isinstance(brief.charts, list)
+    assert all(chart.kind in {"bar", "line", "pie"} for chart in brief.charts)
+    assert brief.map is None
+    assert Stage.PRESENT in brief.coverage.timings_ms
+
+    progress = [event for event in sink.events if event.state is EventState.PROGRESS]
+    assert any(
+        event.stage is Stage.RETRIEVE
+        and event.counts == {"done": len(Backend), "total": len(Backend)}
+        for event in progress
+    )
+    assert any(
+        event.stage is Stage.RANK and event.counts == {"done": 1, "total": 1}
+        for event in progress
+    )
+
     assert set(brief.coverage.timings_ms) == set(Stage)
 
 

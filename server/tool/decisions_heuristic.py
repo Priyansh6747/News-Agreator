@@ -94,6 +94,68 @@ OPINION_MARKERS = {"opinion", "editorial", "column", "commentary"}
 PRESS_RELEASE_MARKERS = {"press release", "announces", "announcement"}
 AGGREGATOR_DOMAINS = {"news.google.com", "news.yahoo.com", "msn.com", "bing.com"}
 
+POSITIVE_TERMS = {
+    "gain",
+    "gained",
+    "gains",
+    "rise",
+    "rises",
+    "rose",
+    "rising",
+    "up",
+    "higher",
+    "surge",
+    "surged",
+    "record",
+    "strong",
+    "stronger",
+    "boost",
+    "boosted",
+    "growth",
+    "increase",
+    "increased",
+    "buy",
+    "buying",
+    "beat",
+    "beats",
+    "win",
+    "wins",
+    "advance",
+    "advances",
+    "positive",
+}
+
+NEGATIVE_TERMS = {
+    "fall",
+    "falls",
+    "fell",
+    "falling",
+    "drop",
+    "drops",
+    "dropped",
+    "down",
+    "lower",
+    "loss",
+    "losses",
+    "weak",
+    "weaker",
+    "decline",
+    "declined",
+    "cut",
+    "cuts",
+    "sell",
+    "selling",
+    "slump",
+    "slumped",
+    "fear",
+    "fears",
+    "risk",
+    "risks",
+    "negative",
+    "miss",
+    "misses",
+}
+
 
 def _tokens(text: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]+", text.lower()))
@@ -209,3 +271,30 @@ class HeuristicDecisionEngine:
     async def injection_risk(self, text: str) -> float:
         matches = sum(1 for pattern in INJECTION_PATTERNS if pattern.search(text))
         return min(1.0, 0.4 * matches)
+
+    async def stance(
+        self, question: str, items: Sequence[str], *, topic: str = ""
+    ) -> list[str]:
+        results: list[str] = []
+        for item in items:
+            tokens = _tokens(item)
+            positive = len(tokens & POSITIVE_TERMS)
+            negative = len(tokens & NEGATIVE_TERMS)
+            if positive > negative:
+                results.append("up")
+            elif negative > positive:
+                results.append("down")
+            else:
+                results.append("flat")
+        return results
+
+    async def score(
+        self, question: str, items: Sequence[str], *, topic: str = ""
+    ) -> list[float]:
+        results: list[float] = []
+        for item in items:
+            tokens = _tokens(item)
+            positive = len(tokens & POSITIVE_TERMS)
+            negative = len(tokens & NEGATIVE_TERMS)
+            results.append(min(1.0, max(0.0, 0.5 + 0.25 * positive - 0.25 * negative)))
+        return results

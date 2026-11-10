@@ -238,3 +238,70 @@ class LayaDecisionEngine:
                 "laya injection_risk failed (%s); using fallback", type(error).__name__
             )
             return await self._fallback.injection_risk(text)
+
+    async def stance(
+        self, question: str, items: Sequence[str], *, topic: str = ""
+    ) -> list[str]:
+        if not items:
+            return []
+        questions = {
+            "stance": {
+                "type": "choice",
+                "instructions": question,
+                "criteria": {
+                    "up": "the item indicates an increase or positive movement for the topic",
+                    "down": "the item indicates a decrease or negative movement for the topic",
+                    "flat": "the item indicates no clear change for the topic",
+                    "unrelated": "the item is not about the topic",
+                },
+            }
+        }
+        requests = [
+            {"state": {"query": topic, "text": item}, "questions": questions}
+            for item in items
+        ]
+        try:
+            results = await self._predict_batch(requests)
+            if len(results) != len(items):
+                raise ValueError("laya returned a mismatched batch size")
+            allowed = {"up", "down", "flat", "unrelated"}
+            stances: list[str] = []
+            for result in results:
+                choice = str(result["answers"]["stance"]["choice"]).lower()
+                stances.append(choice if choice in allowed else "unrelated")
+            return stances
+        except Exception as error:
+            if self._fallback is None:
+                raise
+            logger.warning("laya stance failed (%s); using fallback", type(error).__name__)
+            return await self._fallback.stance(question, items, topic=topic)
+
+    async def score(
+        self, question: str, items: Sequence[str], *, topic: str = ""
+    ) -> list[float]:
+        if not items:
+            return []
+        questions = {
+            "score": {
+                "type": "noul",
+                "instructions": question,
+                "criteria": {
+                    "true": "the item strongly supports a positive answer to the question",
+                    "false": "the item does not support a positive answer to the question",
+                },
+            }
+        }
+        requests = [
+            {"state": {"query": topic, "text": item}, "questions": questions}
+            for item in items
+        ]
+        try:
+            results = await self._predict_batch(requests)
+            if len(results) != len(items):
+                raise ValueError("laya returned a mismatched batch size")
+            return [_clamp(float(result["answers"]["score"]["noul"])) for result in results]
+        except Exception as error:
+            if self._fallback is None:
+                raise
+            logger.warning("laya score failed (%s); using fallback", type(error).__name__)
+            return await self._fallback.score(question, items, topic=topic)

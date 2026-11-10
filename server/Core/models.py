@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -102,6 +103,7 @@ class Stage(StrEnum):
     SCORE = "score"
     ENRICH = "enrich"
     BRIEF = "brief"
+    PRESENT = "present"
 
 
 class EventState(StrEnum):
@@ -134,10 +136,15 @@ class QueryPlan(BaseModel):
     intent: QueryIntent = QueryIntent.OTHER
     brief_schema: BriefSchema = BriefSchema.GENERAL_BRIEF
     freshness_hours: int = 96
+    lookback_hours: int | None = None
     phrasings: list[str] = Field(default_factory=list)
     site_scoped: list[str] = Field(default_factory=list)
     language: str = "en"
     region: str = "US"
+
+    @property
+    def lookback(self) -> int:
+        return self.lookback_hours or self.freshness_hours
 
     @property
     def all_queries(self) -> list[str]:
@@ -353,6 +360,55 @@ class Coverage(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+ChartKind = Literal["bar", "line", "pie"]
+ChartValueFormat = Literal["number", "duration", "percent"]
+
+
+class ChartPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    value: float
+    at: str | None = None
+
+
+class ChartSeries(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    points: list[ChartPoint] = Field(default_factory=list)
+
+
+class ChartSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: ChartKind
+    title: str
+    subtitle: str | None = None
+    takeaway: str | None = None
+    value_format: ChartValueFormat = "number"
+    value_suffix: str | None = None
+    series: list[ChartSeries] = Field(default_factory=list)
+
+
+class MapPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    country_code: str
+    country: str
+    label: str
+    lat: float
+    lon: float
+    story_ids: list[str] = Field(default_factory=list)
+    summary: str | None = None
+
+
+class MapData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    points: list[MapPoint] = Field(default_factory=list)
+
+
 class Brief(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -366,6 +422,8 @@ class Brief(BaseModel):
     stories: list[StoryCluster] = Field(default_factory=list)
     coverage: Coverage
     generated_at: datetime
+    charts: list[ChartSpec] = Field(default_factory=list)
+    map: MapData | None = None
 
 
 class StageEvent(BaseModel):

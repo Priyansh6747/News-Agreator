@@ -19,6 +19,7 @@ from Core.ports import (
     SearchBackend,
     TextExtractor,
 )
+from Core.presenter import Presentation, build_presentation, fallback_presentation
 from Core.query_plan import plan_query
 from Core.rank import rank_candidates
 from Core.registry import SourceRegistry
@@ -91,9 +92,32 @@ class Pipeline:
         coverage.record_timing(stage, elapsed)
         return elapsed
 
+    async def _emit_progress(
+        self,
+        sink: ProgressSink,
+        stage: Stage,
+        done: int,
+        total: int,
+    ) -> None:
+        await self._emit(
+            sink,
+            stage,
+            EventState.PROGRESS,
+            counts={"done": done, "total": total},
+        )
+
     async def run(self, query: str, sink: ProgressSink | None = None) -> Brief:
         sink = sink or NullSink()
         coverage = CoverageCollector()
+
+        async def report_retrieve(done: int, total: int) -> None:
+            await self._emit_progress(sink, Stage.RETRIEVE, done, total)
+
+        async def report_rank(done: int, total: int) -> None:
+            await self._emit_progress(sink, Stage.RANK, done, total)
+
+        async def report_enrich(done: int, total: int) -> None:
+            await self._emit_progress(sink, Stage.ENRICH, done, total)
 
         await self._emit(sink, Stage.PLAN, EventState.STARTED)
         started = perf_counter()
@@ -131,6 +155,8 @@ class Pipeline:
                     registry=self.registry,
                     settings=self.settings,
                     coverage=coverage,
+                    clock=self.clock,
+                    on_progress=report_retrieve,
                 )
                 elapsed = self._record(coverage, Stage.RETRIEVE, started)
                 await self._emit(
@@ -152,6 +178,7 @@ class Pipeline:
                     clock=self.clock,
                     assess_top=self.assess_top,
                     type_top=self.type_top,
+                    on_progress=report_rank,
                 )
                 elapsed = self._record(coverage, Stage.RANK, started)
                 await self._emit(
@@ -210,6 +237,7 @@ class Pipeline:
                     settings=self.settings,
                     coverage=coverage,
                     clock=self.clock,
+                    on_progress=report_enrich,
                 )
                 elapsed = self._record(coverage, Stage.ENRICH, started)
                 await self._emit(
@@ -250,6 +278,54 @@ class Pipeline:
                 "facts": len(brief.key_facts),
                 "timeline": len(brief.timeline),
             },
+            elapsed_ms=elapsed,
+        )
+
+        await self._emit(sink, Stage.PRESENT, EventState.STARTED)
+        started = perf_counter()
+        try:
+            presentation = await asyncio.wait_for(
+                build_presentation(
+                    brief,
+                    generator=self.generator,
+                    decisions=self.decisions,
+                    settings=self.settings,
+                ),
+                timeout=self.settings.presenter_timeout_s,
+            )
+        except Exception as error:  # noqa: BLE001
+            brief.coverage.notes.append(
+                f"presenter unavailable: {type(error).__name__}: {str(error)[:200]}"
+            )
+            try:
+                presentation = await asyncio.wait_for(
+                    fallback_presentation(
+                        brief,
+                        decisions=self.decisions,
+                        settings=self.settings,
+                    ),
+                    timeout=self.settings.presenter_timeout_s,
+                )
+            except Exception:  # noqa: BLE001
+                presentation = Presentation(
+                    charts=[],
+                    map=None,
+                    fallback=True,
+                    message="chart data unavailable",
+                )
+        brief.charts = presentation.charts
+        brief.map = presentation.map
+        elapsed = self._record(coverage, Stage.PRESENT, started)
+        brief.coverage.timings_ms[Stage.PRESENT] = elapsed
+        await self._emit(
+            sink,
+            Stage.PRESENT,
+            EventState.FINISHED,
+            counts={
+                "charts": len(brief.charts),
+                "locations": len(brief.map.points) if brief.map else 0,
+            },
+            message=presentation.message,
             elapsed_ms=elapsed,
         )
         return brief

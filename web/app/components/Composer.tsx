@@ -1,0 +1,142 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
+
+interface ComposerProps {
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+  onStop: () => void;
+  streaming: boolean;
+  hasError?: boolean;
+  placeholder?: string;
+}
+
+export function Composer({
+  value,
+  onChange,
+  onSubmit,
+  onStop,
+  streaming,
+  hasError = false,
+  placeholder = "Ask about a story, market, or event...",
+}: ComposerProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+  }, [value]);
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!streaming) onSubmit();
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.nativeEvent.isComposing
+    ) {
+      event.preventDefault();
+      if (streaming) return;
+      if (value.trim().length >= 2) {
+        onSubmit();
+      } else {
+        textareaRef.current?.reportValidity();
+      }
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className={`group rounded-composer border bg-surface px-5 py-5 transition-colors duration-150 focus-within:border-[var(--border-focus)] focus-within:shadow-[var(--focus-ring)] sm:px-6 ${
+        hasError && !streaming ? "border-error" : "border-line"
+      }`}
+    >
+      <label className="sr-only" htmlFor="brief-query">
+        Query
+      </label>
+      <textarea
+        ref={textareaRef}
+        id="brief-query"
+        name="query"
+        required
+        minLength={2}
+        maxLength={300}
+        rows={1}
+        value={value}
+        readOnly={streaming}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        aria-describedby="composer-hint"
+        className="min-h-[64px] max-h-[160px] w-full resize-none overflow-y-auto bg-transparent text-[17px] leading-6 text-ink outline-none placeholder:text-placeholder"
+      />
+
+      <div className="mt-6 flex items-end justify-between gap-4">
+        <p
+          id="composer-hint"
+          className="text-[11px] leading-4 text-ink-muted"
+        >
+          Enter to generate
+          <span className="hidden sm:inline">
+            {" "}
+            · Shift + Enter for a new line
+          </span>
+        </p>
+
+        {streaming ? (
+          <button
+            type="button"
+            onClick={onStop}
+            aria-label="Stop the brief"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-raised text-ink transition-colors duration-150 hover:bg-surface-hover active:scale-[0.97]"
+          >
+            <StopIcon />
+          </button>
+        ) : (
+          <button
+            type="submit"
+            aria-label="Generate brief"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-raised text-ink transition-colors duration-150 hover:bg-surface-hover active:scale-[0.97]"
+          >
+            <ArrowUpIcon />
+          </button>
+        )}
+      </div>
+    </form>
+  );
+}
+
+function ArrowUpIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      width="18"
+      height="18"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M10 15V5" />
+      <path d="m5.5 9.5 4.5-4.5 4.5 4.5" />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 20 20">
+      <rect x="6.5" y="6.5" width="7" height="7" rx="1.2" fill="currentColor" />
+    </svg>
+  );
+}

@@ -45,6 +45,9 @@ async def test_market_plan_has_window_phrasings_and_sites(
         settings=settings,
     )
     assert plan.freshness_hours == settings.sensitivity_hours[3]
+    assert plan.lookback_hours == max(
+        plan.freshness_hours, settings.context_lookback_hours
+    )
     assert plan.time_sensitivity == 3
     assert plan.intent is QueryIntent.PRICE_CHECK
     assert plan.brief_schema is BriefSchema.PRICE_TABLE

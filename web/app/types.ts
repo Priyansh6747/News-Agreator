@@ -111,6 +111,44 @@ export interface Coverage {
   notes: string[];
 }
 
+export type ChartKind = "bar" | "line" | "pie";
+export type ChartValueFormat = "number" | "duration" | "percent";
+
+export interface ChartPoint {
+  label: string;
+  value: number;
+  at: string | null;
+}
+
+export interface ChartSeries {
+  label: string;
+  points: ChartPoint[];
+}
+
+export interface ChartSpec {
+  kind: ChartKind;
+  title: string;
+  subtitle: string | null;
+  takeaway: string | null;
+  value_format: ChartValueFormat;
+  value_suffix: string | null;
+  series: ChartSeries[];
+}
+
+export interface MapPoint {
+  country_code: string;
+  country: string;
+  label: string;
+  lat: number;
+  lon: number;
+  story_ids: string[];
+  summary: string | null;
+}
+
+export interface MapData {
+  points: MapPoint[];
+}
+
 export interface Brief {
   query: string;
   query_class: string;
@@ -122,6 +160,8 @@ export interface Brief {
   stories: Story[];
   coverage: Coverage;
   generated_at: string;
+  charts?: ChartSpec[];
+  map?: MapData | null;
 }
 
 export interface StageEvent {

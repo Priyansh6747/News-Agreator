@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from Core.coverage import CoverageCollector
 from Core.errors import BackendNotConfigured, BackendTimeout
@@ -9,6 +9,7 @@ from Core.registry import SourceRegistry
 from Core.retrieve import retrieve_candidates
 from Core.settings import Settings
 from test.helpers import NOW
+from tool.fixture_adapters import StaticClock
 
 
 class StubBackend:
@@ -25,8 +26,7 @@ class StubBackend:
     async def search(self, plan: QueryPlan, *, limit: int) -> SearchResult:
         if self._error is not None:
             raise self._error
-        items = self._items[:limit]
-        return SearchResult(items=items, raw_count=len(items))
+        return SearchResult(items=self._items, raw_count=len(self._items))
 
 
 def raw(
@@ -37,13 +37,14 @@ def raw(
     publisher: str | None = None,
     snippet: str | None = None,
     needs_resolution: bool = False,
+    published_at: datetime | None = NOW - timedelta(hours=1),
 ) -> RawItem:
     return RawItem(
         title=title,
         url=url,
         publisher=publisher,
         snippet=snippet,
-        published_at=NOW - timedelta(hours=1),
+        published_at=published_at,
         backend=backend,
         needs_resolution=needs_resolution,
     )
@@ -80,6 +81,7 @@ async def test_merges_duplicate_titles_and_keeps_snippet(
         registry=registry,
         settings=settings,
         coverage=coverage,
+        clock=StaticClock(NOW),
     )
     assert len(candidates) == 1
     assert candidates[0].backend is Backend.BING_NEWS
@@ -112,6 +114,7 @@ async def test_backend_failure_is_isolated(
         registry=registry,
         settings=settings,
         coverage=coverage,
+        clock=StaticClock(NOW),
     )
     assert len(candidates) == 1
     report = coverage.finish()
@@ -138,6 +141,7 @@ async def test_timeout_attempt_and_invalid_link(
         registry=registry,
         settings=settings,
         coverage=coverage,
+        clock=StaticClock(NOW),
     )
     assert candidates == []
     report = coverage.finish()
@@ -157,6 +161,7 @@ async def test_invalid_url_is_dropped(
         registry=registry,
         settings=settings,
         coverage=coverage,
+        clock=StaticClock(NOW),
     )
     assert candidates == []
     assert coverage.finish().drops["link"] == 1
@@ -180,7 +185,54 @@ async def test_resolution_candidates_use_publisher_tier(
         registry=registry,
         settings=settings,
         coverage=coverage,
+        clock=StaticClock(NOW),
     )
     assert candidates[0].tier.value == "T1"
     assert candidates[0].family == "reuters"
     assert candidates[0].needs_resolution is True
+
+
+async def test_merge_cap_keeps_background_context(
+    settings: Settings,
+    registry: SourceRegistry,
+) -> None:
+    config = Settings(
+        _env_file=None,
+        candidate_cap=10,
+        context_candidate_share=0.2,
+    )
+    items = [
+        raw(
+            title=f"Gold fresh {index}",
+            url=f"https://example.com/fresh-{index}",
+            backend=Backend.BING_NEWS,
+            published_at=NOW - timedelta(minutes=index + 1),
+        )
+        for index in range(8)
+    ] + [
+        raw(
+            title=f"Gold history {index}",
+            url=f"https://example.com/history-{index}",
+            backend=Backend.BING_NEWS,
+            published_at=NOW - timedelta(days=index + 1),
+        )
+        for index in range(20)
+    ]
+    coverage = CoverageCollector()
+    candidates = await retrieve_candidates(
+        QueryPlan(query="gold", normalized="gold", freshness_hours=24, lookback_hours=720),
+        backends=[StubBackend(Backend.BING_NEWS, items)],
+        registry=registry,
+        settings=config,
+        coverage=coverage,
+        clock=StaticClock(NOW),
+    )
+    background = [
+        candidate
+        for candidate in candidates
+        if candidate.published_at is not None
+        and candidate.published_at < NOW - timedelta(hours=24)
+    ]
+    assert len(candidates) == 10
+    assert len(background) == 2
+    assert coverage.finish().drops["cap"] == 18

@@ -11,6 +11,7 @@ from Core.ports import (
     DecisionEngine,
     Generator,
     LinkResolver,
+    ProgressCallback,
     TextExtractor,
 )
 from Core.prompts import FACT_SYSTEM, ExtractedFacts, build_fact_prompt
@@ -204,6 +205,7 @@ async def enrich_clusters(
     settings: Settings,
     coverage: CoverageCollector,
     clock: Clock,
+    on_progress: ProgressCallback | None = None,
 ) -> list[StoryCluster]:
     if not clusters:
         return []
@@ -231,8 +233,12 @@ async def enrich_clusters(
 
     semaphore = asyncio.Semaphore(max(1, settings.fetch_concurrency))
     generator_semaphore = asyncio.Semaphore(max(1, settings.generator_concurrency))
+    completed = 0
+    total = len(selected)
+    progress_lock = asyncio.Lock()
 
     async def process(cluster: StoryCluster) -> None:
+        nonlocal completed
         async with semaphore:
             await _enrich_cluster(
                 cluster,
@@ -248,6 +254,10 @@ async def enrich_clusters(
                 clock=clock,
                 generator_semaphore=generator_semaphore,
             )
+        if on_progress is not None:
+            async with progress_lock:
+                completed += 1
+                await on_progress(completed, total)
 
     await asyncio.gather(*(process(cluster) for cluster in selected))
     return clusters

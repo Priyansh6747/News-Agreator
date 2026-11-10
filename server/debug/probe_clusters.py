@@ -53,6 +53,7 @@ async def run(query: str, backend_names: list[str] | None) -> None:
         registry=registry,
         settings=settings,
         coverage=coverage,
+        clock=clock,
     )
     clusters = cluster_candidates(candidates, registry=registry, settings=settings)
     report = coverage.finish()

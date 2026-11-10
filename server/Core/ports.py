@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime
 from typing import Protocol, TypeVar
 
@@ -21,6 +21,8 @@ from Core.models import (
 )
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
+
+ProgressCallback = Callable[[int, int], Awaitable[None]]
 
 
 class SearchBackend(Protocol):
@@ -59,6 +61,14 @@ class DecisionEngine(Protocol):
     ) -> list[CandidateAssessment]: ...
 
     async def injection_risk(self, text: str) -> float: ...
+
+    async def stance(
+        self, question: str, items: Sequence[str], *, topic: str = ""
+    ) -> list[str]: ...
+
+    async def score(
+        self, question: str, items: Sequence[str], *, topic: str = ""
+    ) -> list[float]: ...
 
 
 class Generator(Protocol):

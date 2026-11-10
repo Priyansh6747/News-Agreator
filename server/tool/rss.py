@@ -94,6 +94,7 @@ def parse_feed(
     max_items: int,
     now: datetime,
     future_tolerance_h: int = 1,
+    oldest: datetime | None = None,
     default_publisher: str | None = None,
     publisher_domain: str | None = None,
     needs_resolution: bool = False,
@@ -111,10 +112,7 @@ def parse_feed(
     items: list[RawItem] = []
     future_limit = now + timedelta(hours=future_tolerance_h)
 
-    for index, entry in enumerate(entries):
-        if index >= max_items:
-            drops["feed_cap"] = drops.get("feed_cap", 0) + (raw_count - max_items)
-            break
+    for entry in entries:
         title = _clean_text(entry.get("title"))
         if not title:
             drops["title"] = drops.get("title", 0) + 1
@@ -136,6 +134,12 @@ def parse_feed(
             continue
         if published_at > future_limit:
             drops["future_date"] = drops.get("future_date", 0) + 1
+            continue
+        if oldest is not None and published_at < oldest:
+            drops["too_old"] = drops.get("too_old", 0) + 1
+            continue
+        if len(items) >= max_items:
+            drops["feed_cap"] = drops.get("feed_cap", 0) + 1
             continue
 
         items.append(

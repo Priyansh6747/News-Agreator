@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from Core.coverage import CoverageCollector
 from Core.models import (
@@ -13,6 +13,7 @@ from Core.models import (
     StoryCluster,
     TextStatus,
     TimelineEntry,
+    ensure_aware,
     validate_http_url,
 )
 from Core.ports import Clock, Generator
@@ -33,6 +34,47 @@ def _representative(cluster: StoryCluster | None) -> tuple[str, datetime] | None
     except ValueError:
         return None
     return url, member.candidate.published_at
+
+
+def _with_background_timeline(
+    brief: Brief,
+    *,
+    clusters: list[StoryCluster],
+    plan: QueryPlan,
+    clock: Clock,
+    limit: int,
+) -> Brief:
+    if limit <= 0:
+        return brief
+    cutoff = clock.now() - timedelta(hours=plan.freshness_hours)
+    cited = {entry.source_url for entry in brief.timeline}
+    added: list[TimelineEntry] = []
+    for cluster in clusters:
+        if cluster.last_seen is None or cluster.last_seen >= cutoff:
+            continue
+        representative = _representative(cluster)
+        if representative is None:
+            continue
+        url, _ = representative
+        if url in cited:
+            continue
+        added.append(
+            TimelineEntry(
+                at=cluster.last_seen,
+                what=cluster.headline,
+                source_url=url,
+            )
+        )
+        cited.add(url)
+        if len(added) >= limit:
+            break
+    if not added:
+        return brief
+    brief.timeline = sorted(
+        [*brief.timeline, *added],
+        key=lambda entry: ensure_aware(entry.at) or entry.at,
+    )
+    return brief
 
 
 def _from_draft(
@@ -209,13 +251,17 @@ async def build_brief(
                 schema=BriefDraft,
                 system=BRIEF_SYSTEM,
                 user=build_brief_prompt(
-                    query, clusters, plan.brief_schema.value
+                    query,
+                    clusters,
+                    plan.brief_schema.value,
+                    now=clock.now(),
+                    freshness_hours=plan.freshness_hours,
                 ),
                 max_tokens=settings.generator_max_tokens,
             )
             draft = BriefDraft.model_validate(result.model_dump())
             if draft.answer.strip():
-                return _from_draft(
+                brief = _from_draft(
                     draft,
                     query=query,
                     plan=plan,
@@ -223,16 +269,30 @@ async def build_brief(
                     coverage=coverage,
                     clock=clock,
                 )
+                return _with_background_timeline(
+                    brief,
+                    clusters=clusters,
+                    plan=plan,
+                    clock=clock,
+                    limit=settings.context_top,
+                )
             coverage.note("generator returned an empty answer; using fallback")
         except Exception as error:  # noqa: BLE001
             coverage.note(
                 f"generator unavailable: {type(error).__name__}: {str(error)[:300]}"
             )
 
-    return _fallback(
+    brief = _fallback(
         query=query,
         plan=plan,
         clusters=clusters,
         coverage=coverage,
         clock=clock,
+    )
+    return _with_background_timeline(
+        brief,
+        clusters=clusters,
+        plan=plan,
+        clock=clock,
+        limit=settings.context_top,
     )

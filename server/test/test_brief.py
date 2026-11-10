@@ -1,9 +1,21 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from Core.brief import build_brief
 from Core.cluster import cluster_candidates
 from Core.coverage import CoverageCollector
-from Core.models import Attempt, Backend, CoverageStatus, QueryPlan, Tier
+from Core.models import (
+    Article,
+    Attempt,
+    Backend,
+    CoverageStatus,
+    CredibilityScore,
+    ImportanceScore,
+    QueryPlan,
+    StoryCluster,
+    Tier,
+)
 from Core.registry import SourceRegistry
 from Core.score import score_clusters
 from Core.settings import Settings
@@ -153,3 +165,81 @@ async def test_fixture_generator_is_used(
         clock=clock,
     )
     assert brief.answer == "Fixture brief generated from fixture clusters."
+
+
+def make_cluster(identifier: str, published_at: datetime) -> StoryCluster:
+    candidate = make_candidate(
+        title=f"Gold {identifier}",
+        url=f"https://www.reuters.com/{identifier}",
+        published_at=published_at,
+    )
+    return StoryCluster(
+        id=identifier,
+        headline=candidate.title,
+        members=[Article(candidate=candidate, canonical_url=candidate.url)],
+        importance=ImportanceScore(score=1.0),
+        credibility=CredibilityScore(score=1.0),
+        first_seen=published_at,
+        last_seen=published_at,
+    )
+
+
+class TimelineGenerator(DraftGenerator):
+    def __init__(self, cluster_id: str, at: datetime) -> None:
+        super().__init__(cluster_id)
+        self._at = at
+
+    async def complete_json(self, *, schema, system, user, max_tokens):
+        return schema.model_validate(
+            {
+                "answer": "Generated answer.",
+                "key_facts": [],
+                "timeline": [
+                    {
+                        "at": self._at.isoformat(),
+                        "what": "Already in the draft",
+                        "cluster_id": self._cluster_id,
+                    }
+                ],
+                "disagreements": [],
+                "thin_sourcing": [],
+            }
+        )
+
+
+async def test_background_cluster_is_added_to_the_timeline(
+    settings: Settings,
+    clock: StaticClock,
+) -> None:
+    fresh = make_cluster("fresh", NOW - timedelta(hours=1))
+    background = make_cluster("background", NOW - timedelta(days=5))
+    brief = await build_brief(
+        query="gold prices",
+        plan=plan(),
+        clusters=[fresh, background],
+        coverage=complete_coverage(),
+        generator=DraftGenerator(fresh.id),
+        settings=settings,
+        clock=clock,
+    )
+    assert [entry.what for entry in brief.timeline] == [background.headline]
+    assert brief.timeline[0].at == background.last_seen
+    assert brief.timeline[0].source_url == background.members[0].canonical_url
+
+
+async def test_background_cluster_already_in_timeline_is_not_duplicated(
+    settings: Settings,
+    clock: StaticClock,
+) -> None:
+    fresh = make_cluster("fresh", NOW - timedelta(hours=1))
+    background = make_cluster("background", NOW - timedelta(days=5))
+    brief = await build_brief(
+        query="gold prices",
+        plan=plan(),
+        clusters=[fresh, background],
+        coverage=complete_coverage(),
+        generator=TimelineGenerator(background.id, background.last_seen),
+        settings=settings,
+        clock=clock,
+    )
+    assert [entry.what for entry in brief.timeline] == ["Already in the draft"]

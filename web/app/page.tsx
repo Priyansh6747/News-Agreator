@@ -1,186 +1,187 @@
 "use client";
 
-import { useState } from "react";
-import type { FormEvent } from "react";
+import { useSyncExternalStore, useState } from "react";
 
+import { useApiStatus } from "@/lib/useApiStatus";
+import { useBriefStream } from "@/lib/useBriefStream";
 import { BriefView } from "./components/BriefView";
-import { StageLog } from "./components/StageLog";
-import type { Brief, StageEvent } from "./types";
+import { Composer } from "./components/Composer";
+import { CoveragePill } from "./components/CoveragePill";
+import { Orb } from "./components/Orb";
+import { StageRail } from "./components/StageRail";
+import { SuggestionCards } from "./components/SuggestionCards";
+import { TopBar } from "./components/TopBar";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8012";
-
-const EXAMPLES = ["gold prices", "ukraine war", "nvidia vs amd"];
+const STREAM_ENDPOINT = `${API_BASE}/api/v1/brief/stream`;
+const HEALTH_ENDPOINT = `${API_BASE}/health`;
 
 export default function Home() {
-  const [query, setQuery] = useState("gold prices");
-  const [brief, setBrief] = useState<Brief | null>(null);
-  const [events, setEvents] = useState<StageEvent[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [elapsed, setElapsed] = useState<number | null>(null);
+  const [input, setInput] = useState("");
+  const mounted = useMounted();
+  const apiStatus = useApiStatus(HEALTH_ENDPOINT);
+  const { state, stages, status, brief, error, elapsedMs, start, stop } =
+    useBriefStream({ endpoint: STREAM_ENDPOINT });
 
-  function handleEventChunk(chunk: string) {
-    let eventName = "message";
-    const dataLines: string[] = [];
+  const streaming = status === "streaming";
+  const active = state.query !== null;
+  const greeting = mounted ? timeGreeting() : "Good evening.";
+  const hasStages = Object.keys(state.stages).length > 0;
 
-    for (const line of chunk.split(/\r?\n/)) {
-      if (line.startsWith("event:")) {
-        eventName = line.slice(6).trim();
-      } else if (line.startsWith("data:")) {
-        dataLines.push(line.slice(5).trimStart());
-      }
-    }
-
-    if (dataLines.length === 0) return;
-    const payload = JSON.parse(dataLines.join("\n")) as unknown;
-
-    if (eventName === "stage") {
-      setEvents((previous) => [...previous, payload as StageEvent]);
-    } else if (eventName === "brief") {
-      setBrief(payload as Brief);
-    } else if (eventName === "error") {
-      const errorPayload = payload as { message?: string };
-      setError(errorPayload.message ?? "Pipeline failed.");
-    }
+  function submit(explicit?: string) {
+    const query = (explicit ?? input).trim();
+    if (query.length < 2 || streaming) return;
+    setInput("");
+    void start(query);
   }
 
-  async function readStream(response: Response) {
-    if (!response.body) throw new Error("No response body");
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
+  const liveMessage =
+    status === "streaming"
+      ? state.query
+        ? `Working on ${state.query}.`
+        : "Starting the brief."
+      : status === "done"
+        ? "Brief ready."
+        : status === "stopped"
+          ? "Brief stopped."
+          : "";
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const chunks = buffer.split(/\r?\n\r?\n/);
-      buffer = chunks.pop() ?? "";
-      for (const chunk of chunks) handleEventChunk(chunk);
-    }
-
-    if (buffer.trim()) handleEventChunk(buffer);
-  }
-
-  async function fetchBrief(cleaned: string): Promise<Brief> {
-    const response = await fetch(`${API_BASE}/api/v1/brief`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ query: cleaned }),
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return (await response.json()) as Brief;
-  }
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const cleaned = query.trim();
-    if (cleaned.length < 2) {
-      setError("Enter a query.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setBrief(null);
-    setEvents([]);
-    setElapsed(null);
-    const started = Date.now();
-
-    try {
-      const response = await fetch(`${API_BASE}/api/v1/brief/stream`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ query: cleaned }),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      await readStream(response);
-    } catch {
-      try {
-        setBrief(await fetchBrief(cleaned));
-      } catch (fallbackError) {
-        const message =
-          fallbackError instanceof Error ? fallbackError.message : "unknown error";
-        setError(
-          `Could not reach the API at ${API_BASE} (${message}). Is the FastAPI server running?`,
-        );
-      }
-    } finally {
-      setElapsed(Date.now() - started);
-      setLoading(false);
-    }
-  }
+  const statusLine =
+    status === "streaming"
+      ? "Working through the sources..."
+      : status === "done"
+        ? "Brief ready."
+        : status === "stopped"
+          ? "Stopped. The stages completed so far are kept."
+          : status === "error"
+            ? "The run did not finish."
+            : "";
 
   return (
-    <main className="mx-auto w-full max-w-5xl space-y-5 p-4 sm:p-6">
-      <header>
-        <h1 className="text-2xl font-semibold">NewsAgreator</h1>
-        <p className="text-sm text-zinc-600">
-          Structured news briefs from free sources, with coverage.
-        </p>
-      </header>
+    <main className="mx-auto flex min-h-dvh w-full max-w-[960px] flex-col px-4 pb-12 sm:px-8 lg:px-10">
+      <TopBar apiStatus={apiStatus} />
 
-      <form
-        className="space-y-2 rounded border border-zinc-300 bg-white p-4"
-        onSubmit={submit}
-      >
-        <label className="text-sm font-medium" htmlFor="query">
-          Query
-        </label>
-        <div className="flex gap-2">
-          <input
-            id="query"
-            className="w-full rounded border border-zinc-300 px-3 py-2 text-sm"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            disabled={loading}
-            placeholder="e.g. gold prices"
-          />
-          <button
-            className="rounded bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-50"
-            type="submit"
-            disabled={loading}
-          >
-            {loading ? "Running..." : "Run"}
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-2 text-xs">
-          {EXAMPLES.map((example) => (
-            <button
-              key={example}
-              type="button"
-              className="rounded border border-zinc-300 px-2 py-1 hover:bg-zinc-100 disabled:opacity-50"
-              onClick={() => setQuery(example)}
-              disabled={loading}
-            >
-              {example}
-            </button>
-          ))}
-        </div>
-      </form>
-
-      <p className="font-mono text-xs text-zinc-500">
-        API: {API_BASE} - queries can take 30-90 seconds.
+      <p role="status" aria-live="polite" className="sr-only">
+        {liveMessage}
       </p>
 
-      {error ? (
-        <p className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">
-          {error}
-        </p>
-      ) : null}
+      {!active ? (
+        <div className="flex flex-1 flex-col items-center pt-[clamp(56px,11vh,120px)]">
+          <div className="enter">
+            <Orb size="lg" />
+          </div>
 
-      {loading || events.length > 0 ? (
-        <StageLog events={events} loading={loading} />
-      ) : null}
+          <h1
+            className="enter mt-6 text-center text-[26px] leading-[1.22] tracking-[-0.02em] text-ink-strong sm:text-[34px] sm:leading-[1.18] sm:tracking-[-0.025em]"
+            style={{ animationDelay: "60ms" }}
+          >
+            {greeting}
+            <br />
+            What should I brief you on?
+          </h1>
 
-      {elapsed !== null ? (
-        <p className="font-mono text-xs text-zinc-500">
-          Finished in {(elapsed / 1000).toFixed(1)}s.
-        </p>
-      ) : null}
+          <div
+            className="enter mt-10 w-full"
+            style={{ animationDelay: "120ms" }}
+          >
+            <Composer
+              value={input}
+              onChange={setInput}
+              onSubmit={() => submit()}
+              onStop={stop}
+              streaming={streaming}
+            />
+          </div>
 
-      {brief ? <BriefView brief={brief} /> : null}
+          <div
+            className="enter mt-7 w-full"
+            style={{ animationDelay: "180ms" }}
+          >
+            <SuggestionCards onPick={submit} />
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-1 flex-col gap-6 pb-8" aria-busy={streaming}>
+          <div className="flex items-center gap-3 pt-3">
+            <Orb size="sm" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="min-w-0 truncate text-[22px] font-semibold tracking-[-0.02em] text-ink-strong sm:text-[24px]">
+                  {state.query}
+                </h1>
+                {brief ? <CoveragePill status={brief.coverage.status} /> : null}
+              </div>
+              <p className="mt-1 text-[12px] leading-5 text-ink-muted">
+                {statusLine}
+              </p>
+            </div>
+          </div>
+
+          <Composer
+            value={input}
+            onChange={setInput}
+            onSubmit={() => submit()}
+            onStop={stop}
+            streaming={streaming}
+            hasError={status === "error"}
+          />
+
+          {streaming || hasStages ? (
+            <StageRail
+              key={state.startedAt ?? "idle"}
+              stages={stages}
+              status={status}
+              elapsedMs={elapsedMs}
+              storyCount={brief?.stories.length ?? null}
+              coverageStatus={brief?.coverage.status ?? null}
+            />
+          ) : null}
+
+          {error ? (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-error/30 bg-error-soft px-4 py-3"
+            >
+              <p className="min-w-0 text-[13px] leading-5 text-error">
+                {error}
+              </p>
+              {state.query ? (
+                <button
+                  type="button"
+                  onClick={() => submit(state.query ?? undefined)}
+                  className="shrink-0 rounded-full border border-error/30 px-3 py-1.5 text-[12px] font-medium text-error transition-colors hover:bg-[var(--error-soft)]"
+                >
+                  Retry
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {brief ? <BriefView brief={brief} /> : null}
+        </div>
+      )}
+
+      <p className="mt-auto pt-10 text-center text-[11px] leading-4 text-ink-muted">
+        Free-source news briefs. Coverage is reported, not hidden.
+      </p>
     </main>
+  );
+}
+
+function timeGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning.";
+  if (hour < 18) return "Good afternoon.";
+  return "Good evening.";
+}
+
+const subscribeToMount = () => () => {};
+
+function useMounted(): boolean {
+  return useSyncExternalStore(
+    subscribeToMount,
+    () => true,
+    () => false,
   );
 }

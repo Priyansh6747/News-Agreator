@@ -12,8 +12,13 @@ from tool.decisions_heuristic import HeuristicDecisionEngine
 from tool.fixture_adapters import StaticClock
 
 
-def plan(hours: int = 24) -> QueryPlan:
-    return QueryPlan(query="gold prices", normalized="gold prices", freshness_hours=hours)
+def plan(hours: int = 24, lookback: int | None = None) -> QueryPlan:
+    return QueryPlan(
+        query="gold prices",
+        normalized="gold prices",
+        freshness_hours=hours,
+        lookback_hours=lookback,
+    )
 
 
 async def test_drops_out_of_window_undated_and_future(
@@ -262,6 +267,81 @@ async def test_assess_cap_limits_expensive_engine_calls(
     )
     assert len(ranked) == 3
     assert coverage.finish().drops["assess_cap"] == 5
+
+
+async def test_keeps_background_context_with_its_own_cap(
+    settings: Settings,
+    registry: SourceRegistry,
+) -> None:
+    fresh = [
+        make_candidate(
+            title=f"Gold fresh {index}",
+            url=f"https://www.reuters.com/fresh-{index}",
+            published_at=NOW - timedelta(hours=1),
+        )
+        for index in range(settings.select_top + 2)
+    ]
+    context = [
+        make_candidate(
+            title=f"Gold history {index}",
+            url=f"https://www.reuters.com/history-{index}",
+            published_at=NOW - timedelta(days=index + 2),
+        )
+        for index in range(10)
+    ]
+    coverage = CoverageCollector()
+    ranked = await rank_candidates(
+        fresh + context,
+        plan=plan(hours=24, lookback=720),
+        decisions=HeuristicDecisionEngine(),
+        settings=settings,
+        coverage=coverage,
+        clock=StaticClock(NOW),
+    )
+    background = [
+        candidate
+        for candidate in ranked
+        if candidate.published_at is not None
+        and candidate.published_at < NOW - timedelta(hours=24)
+    ]
+    assert len(ranked) == settings.select_top + settings.context_top
+    assert len(background) == settings.context_top
+    ages = sorted((NOW - candidate.published_at).days for candidate in background)
+    assert ages[0] == 2
+    assert ages[-1] == 11
+    assert coverage.finish().drops["context_cap"] == 10 - settings.context_top
+
+
+async def test_background_context_fills_a_short_fresh_set(
+    settings: Settings,
+    registry: SourceRegistry,
+) -> None:
+    fresh = [
+        make_candidate(
+            title=f"Gold fresh {index}",
+            url=f"https://www.reuters.com/fresh-{index}",
+        )
+        for index in range(2)
+    ]
+    context = [
+        make_candidate(
+            title=f"Gold history {index}",
+            url=f"https://www.reuters.com/history-{index}",
+            published_at=NOW - timedelta(days=index + 1),
+        )
+        for index in range(10)
+    ]
+    coverage = CoverageCollector()
+    ranked = await rank_candidates(
+        fresh + context,
+        plan=plan(hours=24, lookback=720),
+        decisions=HeuristicDecisionEngine(),
+        settings=settings,
+        coverage=coverage,
+        clock=StaticClock(NOW),
+    )
+    assert len(ranked) == settings.select_top
+    assert "context_cap" not in coverage.finish().drops
 
 
 async def test_caps_at_select_top(
