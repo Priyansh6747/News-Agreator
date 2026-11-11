@@ -183,6 +183,13 @@ class Settings(BaseSettings):
     laya_assess_top: int = 0
     laya_type_top: int = 30
 
+    chat_history_messages: int = 12
+    chat_max_conversations: int = 50
+    chat_max_messages: int = 60
+    chat_decision_max_tokens: int = 400
+    chat_answer_max_tokens: int = 900
+    chat_context_chars: int = 12000
+
     generator_base_url: str = "https://api.openai.com/v1"
     generator_api_key: str = ""
     generator_model: str = ""

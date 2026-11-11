@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from Core.models import Backend, ExtractedText, FetchedPage, QueryPlan, RawItem, SearchResult
-from Core.prompts import BriefDraft, ExtractedFacts
+from Core.prompts import BriefDraft, ChatDecision, ChatToolCall, ExtractedFacts
 
 DEMO_PATH = Path(__file__).resolve().parents[1] / "Core" / "data" / "demo_candidates.json"
 
@@ -98,3 +98,39 @@ class FixtureGenerator:
         if schema is ExtractedFacts:
             return ExtractedFacts(facts=[])
         raise ValueError(f"unsupported schema: {schema.__name__}")
+
+    async def complete_chat(
+        self,
+        *,
+        schema: type,
+        messages: list[dict[str, str]],
+        max_tokens: int,
+    ):
+        last = next(
+            (
+                message["content"]
+                for message in reversed(messages)
+                if message.get("role") == "user"
+            ),
+            "",
+        ).strip()
+        if schema is ChatDecision:
+            if last.lower() in {"hi", "hello", "hey", "thanks", "thank you"}:
+                return ChatDecision(
+                    reply="Hello. Ask me about a story, market, or event."
+                )
+            return ChatDecision(tool_calls=[ChatToolCall(query=last[:300])])
+        return await self.complete_json(
+            schema=schema,
+            system="",
+            user=last,
+            max_tokens=max_tokens,
+        )
+
+    async def stream_text(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        max_tokens: int,
+    ):
+        yield "Fixture answer."

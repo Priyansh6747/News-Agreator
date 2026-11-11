@@ -470,3 +470,63 @@ class ExtractedText(BaseModel):
     published_at: datetime | None = None
     word_count: int
     quality: float = Field(ge=0.0, le=1.0)
+
+
+class ChatRole(StrEnum):
+    USER = "user"
+    ASSISTANT = "assistant"
+
+
+class ChatRun(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query: str
+    status: Literal["completed", "failed"]
+    elapsed_ms: int
+    stages: list[StageEvent] = Field(default_factory=list)
+    coverage_status: str | None = None
+    story_count: int | None = None
+
+
+class ChatMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    role: ChatRole
+    content: str
+    created_at: datetime
+    brief: Brief | None = None
+    run: ChatRun | None = None
+
+
+class ChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    conversation_id: str | None = None
+    message: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("message")
+    @classmethod
+    def _clean(cls, value: str) -> str:
+        cleaned = " ".join(value.split())
+        if not cleaned:
+            raise ValueError("message must not be empty")
+        return cleaned
+
+
+class ChatTurn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    conversation_id: str
+    user: ChatMessage
+    assistant: ChatMessage
+
+
+class ChatConversation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    title: str
+    messages: list[ChatMessage] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime

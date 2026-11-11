@@ -4,6 +4,8 @@ import importlib.util
 import logging
 from functools import lru_cache
 
+from Core.chat import ChatService
+from Core.conversations import ConversationStore
 from Core.errors import GeneratorNotConfigured
 from Core.models import Backend
 from Core.pipeline import Pipeline, SystemClock
@@ -117,11 +119,36 @@ def get_pipeline() -> Pipeline:
     return build_pipeline(get_settings())
 
 
+@lru_cache(maxsize=1)
+def get_conversation_store() -> ConversationStore:
+    settings = get_settings()
+    return ConversationStore(
+        max_conversations=settings.chat_max_conversations,
+        max_messages=settings.chat_max_messages,
+    )
+
+
+@lru_cache(maxsize=1)
+def get_chat_service() -> ChatService:
+    settings = get_settings()
+    pipeline = get_pipeline()
+    return ChatService(
+        pipeline=pipeline,
+        generator=pipeline.generator,
+        store=get_conversation_store(),
+        settings=settings,
+        clock=pipeline.clock,
+    )
+
+
 async def close_pipeline() -> None:
     global _http_client
     if _http_client is not None:
         await _http_client.aclose()
         _http_client = None
+    get_chat_service.cache_clear()
+    await get_conversation_store().clear()
+    get_conversation_store.cache_clear()
     get_pipeline.cache_clear()
 
 

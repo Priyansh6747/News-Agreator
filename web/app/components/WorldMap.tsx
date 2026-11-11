@@ -34,7 +34,15 @@ function storyCount(count: number): string {
   return `${count} ${count === 1 ? "story" : "stories"}`;
 }
 
-export function WorldMap({ data, stories }: { data: MapData; stories: Story[] }) {
+export function WorldMap({
+  data,
+  stories,
+  layout = "default",
+}: {
+  data: MapData;
+  stories: Story[];
+  layout?: "default" | "pane";
+}) {
   const [selected, setSelected] = useState<string | null>(
     data.points[0]?.country_code ?? null,
   );
@@ -45,7 +53,7 @@ export function WorldMap({ data, stories }: { data: MapData; stories: Story[] })
     : [];
 
   return (
-    <section className="px-6 py-6 sm:px-8 sm:py-7">
+    <section className={layout === "pane" ? "px-5 py-5" : "px-6 py-6 sm:px-8 sm:py-7"}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
           Where the coverage points
@@ -55,7 +63,13 @@ export function WorldMap({ data, stories }: { data: MapData; stories: Story[] })
         </p>
       </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+      <div
+        className={`mt-5 grid gap-4 ${
+          layout === "pane"
+            ? "grid-cols-1 xl:grid-cols-[1.6fr_1fr]"
+            : "lg:grid-cols-[1.6fr_1fr]"
+        }`}
+      >
         <div className="min-w-0 overflow-hidden rounded-lg border border-line bg-canvas-soft p-2">
           <svg
             aria-hidden="true"

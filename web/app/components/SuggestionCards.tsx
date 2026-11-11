@@ -1,4 +1,10 @@
-const SUGGESTIONS = [
+interface Suggestion {
+  title: string;
+  body: string;
+  query: string;
+}
+
+const SUGGESTIONS: Suggestion[] = [
   {
     title: "Markets",
     body: "Gold, oil, and the indices moving today.",
@@ -18,20 +24,22 @@ const SUGGESTIONS = [
 
 export function SuggestionCards({
   onPick,
+  suggestions = SUGGESTIONS,
 }: {
   onPick: (query: string) => void;
+  suggestions?: Suggestion[];
 }) {
   return (
     <div className="grid gap-4 min-[720px]:grid-cols-3">
-      {SUGGESTIONS.map((suggestion) => (
+      {suggestions.map((suggestion) => (
         <button
           key={suggestion.query}
           type="button"
           onClick={() => onPick(suggestion.query)}
-          className="group flex min-h-[108px] flex-col justify-between gap-5 rounded-card border border-line bg-surface p-5 text-left transition-colors duration-200 hover:border-line-strong hover:bg-surface-raised"
+          className="group flex min-h-[96px] flex-col justify-between gap-5 rounded-card border border-line bg-surface p-5 text-left transition-colors duration-200 hover:border-line-strong hover:bg-surface-raised"
         >
           <span>
-            <span className="block text-[16px] font-semibold tracking-[-0.01em] text-ink">
+            <span className="block text-[17px] font-semibold tracking-[-0.01em] text-ink">
               {suggestion.title}
             </span>
             <span className="mt-2 block text-[13px] leading-5 text-ink-muted">

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from datetime import datetime
 from typing import Protocol, TypeVar
 
@@ -80,6 +80,21 @@ class Generator(Protocol):
         user: str,
         max_tokens: int,
     ) -> ModelT: ...
+
+    async def complete_chat(
+        self,
+        *,
+        schema: type[ModelT],
+        messages: list[dict[str, str]],
+        max_tokens: int,
+    ) -> ModelT: ...
+
+    def stream_text(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        max_tokens: int,
+    ) -> AsyncIterator[str]: ...
 
 
 class Cache(Protocol):

@@ -8,7 +8,11 @@ from pydantic import BaseModel
 
 from Core.errors import GeneratorError
 from Core.settings import Settings
-from tool.generator_api import GEMINI_OPENAI_BASE, OpenAICompatibleGenerator
+from tool.generator_api import (
+    GEMINI_OPENAI_BASE,
+    OpenAICompatibleGenerator,
+    parse_stream_delta,
+)
 
 
 class Ping(BaseModel):
@@ -164,3 +168,78 @@ async def test_invalid_content_raises() -> None:
         await generator.complete_json(
             schema=Ping, system="Return JSON.", user="Return an answer.", max_tokens=20
         )
+
+
+async def test_complete_chat_sends_the_messages_array() -> None:
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(request.content))
+        return completion('{"answer": "ok"}')
+
+    generator = OpenAICompatibleGenerator(
+        settings(), transport=httpx.MockTransport(handler)
+    )
+    result = await generator.complete_chat(
+        schema=Ping,
+        messages=[
+            {"role": "system", "content": "System rules."},
+            {"role": "user", "content": "User question."},
+        ],
+        max_tokens=20,
+    )
+
+    assert result.answer == "ok"
+    messages = seen[0]["messages"]
+    assert messages[0]["role"] == "system"
+    assert "System rules." in messages[0]["content"]
+    assert "Return only a JSON object" in messages[0]["content"]
+    assert messages[1] == {"role": "user", "content": "User question."}
+
+
+def test_parse_stream_delta() -> None:
+    assert (
+        parse_stream_delta('data: {"choices":[{"delta":{"content":"Hi"}}]}') == "Hi"
+    )
+    assert parse_stream_delta("data: [DONE]") is None
+    assert parse_stream_delta("event: ping") is None
+    assert parse_stream_delta("data: {bad") is None
+    assert parse_stream_delta('data: {"choices":[]}') is None
+
+
+async def test_stream_text_yields_deltas() -> None:
+    body = (
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n'
+        'data: {"choices":[{"delta":{"content":" there"}}]}\n\n'
+        "data: [DONE]\n\n"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body.encode())
+
+    generator = OpenAICompatibleGenerator(
+        settings(), transport=httpx.MockTransport(handler)
+    )
+    chunks = [
+        chunk
+        async for chunk in generator.stream_text(
+            messages=[{"role": "user", "content": "hi"}],
+            max_tokens=20,
+        )
+    ]
+    assert chunks == ["Hi", " there"]
+
+
+async def test_stream_text_raises_on_http_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, content=b"boom")
+
+    generator = OpenAICompatibleGenerator(
+        settings(), transport=httpx.MockTransport(handler)
+    )
+    with pytest.raises(GeneratorError):
+        async for _ in generator.stream_text(
+            messages=[{"role": "user", "content": "hi"}],
+            max_tokens=20,
+        ):
+            pass

@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
-from Core.models import StoryCluster
+from Core.models import Brief, ChatMessage, StoryCluster
+from Core.settings import Settings
 
 BRIEF_SYSTEM = (
     "You write structured news briefs from clustered headlines and extracted facts. "
@@ -68,6 +69,45 @@ class BriefDraft(BaseModel):
     timeline: list[DraftTimelineEntry] = Field(default_factory=list)
     disagreements: list[DraftDisagreement] = Field(default_factory=list)
     thin_sourcing: list[str] = Field(default_factory=list)
+
+
+class ChatToolCall(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    name: str = "news_brief"
+    query: str = ""
+
+
+class ChatDecision(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    reply: str | None = None
+    tool_calls: list[ChatToolCall] = Field(default_factory=list)
+
+
+CHAT_SYSTEM = (
+    "You are NewsAgreator, a news analyst chat assistant. You can answer directly or call one "
+    "tool.\n"
+    "Tool: news_brief(query: string) retrieves recent news and builds a grounded brief. Use it "
+    "for current events, markets, companies, conflicts, prices, or anything that needs fresh "
+    "sources.\n"
+    "Use reply for greetings, thanks, capability questions, and follow-ups that can be answered "
+    "from the supplied latest brief.\n"
+    "When you call news_brief, make the query self-contained: resolve pronouns and follow-ups "
+    "into a full search query that includes the topic.\n"
+    "Never invent facts, numbers, publishers, or URLs. If the tool result is partial, say so.\n"
+    "Return only JSON matching the ChatDecision schema: either reply, or tool_calls with one "
+    "news_brief call. Today is {today}."
+)
+
+CHAT_ANSWER_SYSTEM = (
+    "You are NewsAgreator answering the latest message in a news chat. Use only the supplied "
+    "news_brief tool result and the conversation. Write a concise, conversational answer to the "
+    "user's latest message in plain text. Do not use markdown, headings, or bullet lists. Do not "
+    "repeat the structured brief or every fact. State uncertainty when coverage is partial. "
+    "Stories older than the current news window are background context; never present them as "
+    "current."
+)
 
 
 class DraftFact(BaseModel):
@@ -163,6 +203,95 @@ def build_brief_prompt(
         "Clusters (JSON). Cite these cluster_id values only:\n"
         f"{json.dumps(payload, ensure_ascii=False)}"
     )
+
+
+def _chat_history(messages: list[ChatMessage], limit: int) -> list[dict[str, str]]:
+    kept = [message for message in messages if message.content.strip()]
+    window = kept[-max(1, limit) :]
+    return [
+        {"role": message.role.value, "content": message.content}
+        for message in window
+    ]
+
+
+def brief_context(brief: Brief, max_chars: int = 12000) -> str:
+    payload = {
+        "query": brief.query,
+        "generated_at": brief.generated_at.isoformat(),
+        "coverage": brief.coverage.status.value,
+        "answer": brief.answer,
+        "key_facts": [
+            {
+                "value": fact.value,
+                "meaning": fact.meaning,
+                "published_at": fact.published_at.isoformat(),
+            }
+            for fact in brief.key_facts[:8]
+        ],
+        "timeline": [
+            {"at": entry.at.isoformat(), "what": entry.what}
+            for entry in brief.timeline[:12]
+        ],
+        "stories": [
+            {
+                "headline": story.headline,
+                "publishers": sorted(
+                    {
+                        member.candidate.publisher
+                        for member in story.members
+                        if member.candidate.publisher
+                    }
+                ),
+                "first_seen": (
+                    story.first_seen.isoformat() if story.first_seen else None
+                ),
+                "last_seen": story.last_seen.isoformat() if story.last_seen else None,
+                "importance": story.importance.score,
+                "facts": [fact.claim for fact in story.facts[:3]],
+            }
+            for story in brief.stories[:8]
+        ],
+        "thin_sourcing": brief.thin_sourcing,
+    }
+    text = json.dumps(payload, ensure_ascii=False)
+    if len(text) <= max_chars:
+        return text
+    return text[: max(0, max_chars - 3)].rstrip() + "..."
+
+
+def build_chat_decision_messages(
+    messages: list[ChatMessage],
+    latest_brief: Brief | None,
+    *,
+    settings: Settings,
+    now: datetime,
+) -> list[dict[str, str]]:
+    system = CHAT_SYSTEM.format(today=now.date().isoformat())
+    if latest_brief is not None:
+        system = (
+            f"{system}\n\nLatest news_brief result already in the conversation:\n"
+            f"{brief_context(latest_brief, settings.chat_context_chars)}"
+        )
+    return [
+        {"role": "system", "content": system},
+        *_chat_history(messages, settings.chat_history_messages),
+    ]
+
+
+def build_chat_answer_messages(
+    messages: list[ChatMessage],
+    brief: Brief,
+    *,
+    settings: Settings,
+) -> list[dict[str, str]]:
+    system = (
+        f"{CHAT_ANSWER_SYSTEM}\n\nnews_brief result:\n"
+        f"{brief_context(brief, settings.chat_context_chars)}"
+    )
+    return [
+        {"role": "system", "content": system},
+        *_chat_history(messages, settings.chat_history_messages),
+    ]
 
 
 def build_fact_prompt(query: str, cluster: StoryCluster, text: str) -> str:

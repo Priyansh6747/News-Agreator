@@ -11,6 +11,13 @@ interface ComposerProps {
   streaming: boolean;
   hasError?: boolean;
   placeholder?: string;
+  id?: string;
+  compact?: boolean;
+  submitLabel?: string;
+  stopLabel?: string;
+  maxLength?: number;
+  minLength?: number;
+  autoFocus?: boolean;
 }
 
 export function Composer({
@@ -21,15 +28,27 @@ export function Composer({
   streaming,
   hasError = false,
   placeholder = "Ask about a story, market, or event...",
+  id = "brief-query",
+  compact = false,
+  submitLabel = "Generate brief",
+  stopLabel = "Stop the brief",
+  maxLength = 300,
+  minLength = 2,
+  autoFocus = false,
 }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const hintId = `${id}-hint`;
 
   useEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
     textarea.style.height = "auto";
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
-  }, [value]);
+    textarea.style.height = `${Math.min(textarea.scrollHeight, compact ? 120 : 160)}px`;
+  }, [value, compact]);
+
+  useEffect(() => {
+    if (autoFocus) textareaRef.current?.focus();
+  }, [autoFocus]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -44,7 +63,7 @@ export function Composer({
     ) {
       event.preventDefault();
       if (streaming) return;
-      if (value.trim().length >= 2) {
+      if (value.trim().length >= minLength) {
         onSubmit();
       } else {
         textareaRef.current?.reportValidity();
@@ -55,47 +74,56 @@ export function Composer({
   return (
     <form
       onSubmit={handleSubmit}
-      className={`group rounded-composer border bg-surface px-5 py-5 transition-colors duration-150 focus-within:border-[var(--border-focus)] focus-within:shadow-[var(--focus-ring)] sm:px-6 ${
-        hasError && !streaming ? "border-error" : "border-line"
-      }`}
+      className={`group rounded-composer border bg-surface transition-colors duration-150 focus-within:border-[var(--border-focus)] focus-within:shadow-[var(--focus-ring)] ${
+        compact ? "px-4 py-3" : "px-5 py-5 sm:px-6"
+      } ${hasError && !streaming ? "border-error" : "border-line"}`}
     >
-      <label className="sr-only" htmlFor="brief-query">
+      <label className="sr-only" htmlFor={id}>
         Query
       </label>
       <textarea
         ref={textareaRef}
-        id="brief-query"
+        id={id}
         name="query"
         required
-        minLength={2}
-        maxLength={300}
+        minLength={minLength}
+        maxLength={maxLength}
         rows={1}
         value={value}
         readOnly={streaming}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        aria-describedby="composer-hint"
-        className="min-h-[64px] max-h-[160px] w-full resize-none overflow-y-auto bg-transparent text-[17px] leading-6 text-ink outline-none placeholder:text-placeholder"
+        aria-describedby={hintId}
+        className={`w-full resize-none overflow-y-auto bg-transparent leading-6 text-ink outline-none placeholder:text-placeholder ${
+          compact
+            ? "min-h-[44px] max-h-[120px] text-[15px]"
+            : "min-h-[64px] max-h-[160px] text-[17px]"
+        }`}
       />
 
-      <div className="mt-6 flex items-end justify-between gap-4">
-        <p
-          id="composer-hint"
-          className="text-[11px] leading-4 text-ink-muted"
-        >
-          Enter to generate
-          <span className="hidden sm:inline">
-            {" "}
-            · Shift + Enter for a new line
+      <div
+        className={`flex items-end justify-between gap-4 ${compact ? "mt-3" : "mt-6"}`}
+      >
+        {compact ? (
+          <span id={hintId} className="sr-only">
+            Enter to send. Shift + Enter for a new line.
           </span>
-        </p>
+        ) : (
+          <p id={hintId} className="text-[11px] leading-4 text-ink-muted">
+            Enter to generate
+            <span className="hidden sm:inline">
+              {" "}
+              · Shift + Enter for a new line
+            </span>
+          </p>
+        )}
 
         {streaming ? (
           <button
             type="button"
             onClick={onStop}
-            aria-label="Stop the brief"
+            aria-label={stopLabel}
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-raised text-ink transition-colors duration-150 hover:bg-surface-hover active:scale-[0.97]"
           >
             <StopIcon />
@@ -103,7 +131,7 @@ export function Composer({
         ) : (
           <button
             type="submit"
-            aria-label="Generate brief"
+            aria-label={submitLabel}
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-raised text-ink transition-colors duration-150 hover:bg-surface-hover active:scale-[0.97]"
           >
             <ArrowUpIcon />

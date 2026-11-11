@@ -172,3 +172,37 @@ export interface StageEvent {
   elapsed_ms: number | null;
   at: string;
 }
+
+export type ChatRole = "user" | "assistant";
+
+export interface ChatRun {
+  query: string;
+  status: "completed" | "failed" | "stopped";
+  elapsed_ms: number;
+  stages: StageEvent[];
+  coverage_status: string | null;
+  story_count: number | null;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: ChatRole;
+  content: string;
+  created_at: string;
+  brief?: Brief | null;
+  run?: ChatRun | null;
+}
+
+export interface ChatTurn {
+  conversation_id: string;
+  user: ChatMessage;
+  assistant: ChatMessage;
+}
+
+export interface ChatConversation {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  created_at: string;
+  updated_at: string;
+}

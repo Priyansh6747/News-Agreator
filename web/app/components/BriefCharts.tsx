@@ -35,7 +35,13 @@ function formatValue(value: number, spec: ChartSpec): string {
   return spec.value_suffix ? `${formatted} ${spec.value_suffix}` : formatted;
 }
 
-export function BriefCharts({ charts }: { charts: ChartSpec[] }) {
+export function BriefCharts({
+  charts,
+  layout = "default",
+}: {
+  charts: ChartSpec[];
+  layout?: "default" | "pane";
+}) {
   const reduceMotion = useReducedMotion() ?? false;
   const animate = !reduceMotion;
 
@@ -44,7 +50,7 @@ export function BriefCharts({ charts }: { charts: ChartSpec[] }) {
   }
 
   return (
-    <section className="px-6 py-6 sm:px-8 sm:py-7">
+    <section className={layout === "pane" ? "px-5 py-5" : "px-6 py-6 sm:px-8 sm:py-7"}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
           Charts
@@ -54,7 +60,11 @@ export function BriefCharts({ charts }: { charts: ChartSpec[] }) {
         </p>
       </div>
 
-      <div className="mt-5 grid gap-4 md:grid-cols-2">
+      <div
+        className={`mt-5 grid gap-4 ${
+          layout === "pane" ? "grid-cols-1 xl:grid-cols-2" : "md:grid-cols-2"
+        }`}
+      >
         {charts.map((chart, index) => (
           <ChartErrorBoundary key={`${chart.kind}-${chart.title}-${index}`}>
             <ChartPanel spec={chart} animate={animate} />
