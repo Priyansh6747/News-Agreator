@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import argparse
 import atexit
-import curses
 import json
 import locale
 import os
+import platform
 import re
 import shutil
 import signal
@@ -23,6 +23,11 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+
+try:
+    import curses
+except ImportError:  # pragma: no cover - Windows without windows-curses
+    curses = None  # type: ignore[assignment]
 
 ROOT = Path(__file__).resolve().parent
 SERVER_DIR = ROOT / "server"
@@ -48,6 +53,121 @@ LIVE: list[Service] = []
 UV = "uv"
 BUN = "bun"
 META = ""
+
+IS_WINDOWS = os.name == "nt"
+CURSES_AVAILABLE = curses is not None
+
+
+def _popen_group_kwargs() -> dict[str, int]:
+    """Start each service in its own group so both children can be stopped."""
+    if IS_WINDOWS:
+        return {
+            "creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        }
+    return {"start_new_session": True}
+
+
+def _command(executable: str, *args: str) -> list[str]:
+    """Build a launchable command, wrapping .cmd/.bat shims on Windows."""
+    if IS_WINDOWS and executable.lower().endswith((".cmd", ".bat")):
+        comspec = os.environ.get("COMSPEC", "cmd.exe")
+        return [
+            comspec,
+            "/d",
+            "/s",
+            "/c",
+            subprocess.list2cmdline([executable, *args]),
+        ]
+    return [executable, *args]
+
+
+def _taskkill(pid: int, *, force: bool) -> None:
+    command = ["taskkill", "/PID", str(pid), "/T"]
+    if force:
+        command.append("/F")
+    try:
+        subprocess.run(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def _terminate_process(
+    proc: subprocess.Popen[str] | None,
+    *,
+    force: bool = False,
+) -> None:
+    """Terminate a service tree with the right primitive for the OS."""
+    if proc is None or proc.poll() is not None:
+        return
+
+    if IS_WINDOWS:
+        if force:
+            _taskkill(proc.pid, force=True)
+            try:
+                if proc.poll() is None:
+                    proc.kill()
+            except OSError:
+                pass
+            return
+        ctrl_break = getattr(signal, "CTRL_BREAK_EVENT", None)
+        if ctrl_break is not None:
+            try:
+                proc.send_signal(ctrl_break)
+                return
+            except (OSError, ValueError):
+                pass
+        try:
+            proc.terminate()
+        except OSError:
+            pass
+        return
+
+    sig = signal.SIGKILL if force else signal.SIGTERM
+    try:
+        os.killpg(os.getpgid(proc.pid), sig)
+    except OSError:
+        try:
+            if force:
+                proc.kill()
+            else:
+                proc.terminate()
+        except OSError:
+            pass
+
+
+def _check_tool(name: str, executable: str) -> bool:
+    """Verify the tool resolves and can actually run."""
+    try:
+        result = subprocess.run(
+            _command(executable, "--version"),
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(
+            f"start: {name} at {executable} could not run: {exc}",
+            file=sys.stderr,
+        )
+        return False
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip().splitlines()[:3]
+        print(
+            f"start: {name} at {executable} is not usable "
+            f"(exit {result.returncode})",
+            file=sys.stderr,
+        )
+        for line in detail:
+            print(f"  {line}", file=sys.stderr)
+        return False
+    return True
 
 
 def clean_line(raw: str) -> str:
@@ -89,7 +209,7 @@ class Service:
                 text=True,
                 errors="replace",
                 bufsize=1,
-                start_new_session=True,
+                **_popen_group_kwargs(),
             )
         except OSError as exc:
             self.status = "failed"
@@ -212,7 +332,7 @@ def _start_step(step: Step) -> None:
             text=True,
             errors="replace",
             bufsize=1,
-            start_new_session=True,
+            **_popen_group_kwargs(),
         )
     except OSError as exc:
         step.output.append(f"could not start: {exc}")
@@ -249,19 +369,13 @@ def _terminate_step(step: Step) -> None:
     if step.proc is None or step.proc.poll() is not None or step.terminating:
         return
     step.terminating = True
-    try:
-        os.killpg(os.getpgid(step.proc.pid), signal.SIGTERM)
-    except OSError:
-        pass
+    _terminate_process(step.proc)
 
 
 def _kill_step(step: Step) -> None:
     if step.proc is None or step.proc.poll() is not None:
         return
-    try:
-        os.killpg(os.getpgid(step.proc.pid), signal.SIGKILL)
-    except OSError:
-        pass
+    _terminate_process(step.proc, force=True)
 
 
 def ensure_server_env() -> str:
@@ -287,12 +401,17 @@ def build_steps(args: argparse.Namespace) -> list[Step]:
             Step(
                 label="server deps",
                 detail="uv sync --extra laya",
-                cmd=[UV, "sync", "--extra", "laya"],
+                cmd=_command(UV, "sync", "--extra", "laya"),
                 cwd=SERVER_DIR,
             )
         )
         steps.append(
-            Step(label="web deps", detail="bun install", cmd=[BUN, "install"], cwd=WEB_DIR)
+            Step(
+                label="web deps",
+                detail="bun install",
+                cmd=_command(BUN, "install"),
+                cwd=WEB_DIR,
+            )
         )
     return steps
 
@@ -342,7 +461,16 @@ def build_services(args: argparse.Namespace) -> list[Service]:
             label="api",
             url=api_url,
             health_url=api_url + "/ready",
-            cmd=[UV, "run", "uvicorn", "main:app", "--host", args.host, "--port", str(args.port)],
+            cmd=_command(
+                UV,
+                "run",
+                "uvicorn",
+                "main:app",
+                "--host",
+                args.host,
+                "--port",
+                str(args.port),
+            ),
             cwd=SERVER_DIR,
             env=api_env,
         ),
@@ -351,7 +479,14 @@ def build_services(args: argparse.Namespace) -> list[Service]:
             label="web",
             url=web_url,
             health_url=web_url + "/",
-            cmd=[BUN, "run", "dev", "--", "--port", str(args.web_port)],
+            cmd=_command(
+                BUN,
+                "run",
+                "dev",
+                "--",
+                "--port",
+                str(args.web_port),
+            ),
             cwd=WEB_DIR,
             env=web_env,
         ),
@@ -375,10 +510,7 @@ def stop_services(services: list[Service]) -> None:
         proc = service.proc
         if proc is not None and proc.poll() is None:
             service.stopping = True
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            except OSError:
-                pass
+            _terminate_process(proc)
     deadline = time.monotonic() + 8
     for service in services:
         proc = service.proc
@@ -387,21 +519,13 @@ def stop_services(services: list[Service]) -> None:
         try:
             proc.wait(timeout=max(0.1, deadline - time.monotonic()))
         except subprocess.TimeoutExpired:
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            except OSError:
-                pass
+            _terminate_process(proc, force=True)
 
 
 @atexit.register
 def _emergency_cleanup() -> None:
     for service in LIVE:
-        proc = service.proc
-        if proc is not None and proc.poll() is None:
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            except OSError:
-                pass
+        _terminate_process(service.proc)
 
 
 def _attr(name: str, extra: int = 0) -> int:
@@ -822,6 +946,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--no-sync", action="store_true", help="skip uv sync and bun install")
     parser.add_argument("--plain", action="store_true", help="stream plain prefixed logs")
+    parser.add_argument(
+        "--tui",
+        action="store_true",
+        help="force the curses UI when available (Windows needs windows-curses)",
+    )
     return parser.parse_args(argv)
 
 
@@ -844,10 +973,22 @@ def main(argv: list[str] | None = None) -> int:
         print(f"start: web app not found at {WEB_DIR}", file=sys.stderr)
         return 1
     if not UV:
-        print("start: uv is not installed or not on PATH", file=sys.stderr)
+        print(
+            "start: uv is not installed or not on PATH.\n"
+            "  Install: https://docs.astral.sh/uv/getting-started/installation/",
+            file=sys.stderr,
+        )
         return 1
     if not BUN:
-        print("start: bun is not installed or not on PATH", file=sys.stderr)
+        print(
+            "start: bun is not installed or not on PATH.\n"
+            "  Install: https://bun.sh/docs/installation",
+            file=sys.stderr,
+        )
+        return 1
+    if not _check_tool("uv", UV):
+        return 1
+    if not _check_tool("bun", BUN):
         return 1
     if port_in_use(args.port):
         print(f"start: port {args.port} is already in use (try --port)", file=sys.stderr)
@@ -856,13 +997,25 @@ def main(argv: list[str] | None = None) -> int:
         print(f"start: port {args.web_port} is already in use (try --web-port)", file=sys.stderr)
         return 1
 
-    META = f"{args.app_env} · laya {args.device or 'from .env'}"
+    META = (
+        f"{args.app_env} · {platform.system().lower()} · "
+        f"laya {args.device or 'from .env'}"
+    )
     steps = build_steps(args)
+
+    if args.tui and not CURSES_AVAILABLE:
+        print(
+            "start: --tui requested but curses is unavailable; using plain logs",
+            file=sys.stderr,
+        )
+    term_ok = IS_WINDOWS or os.environ.get("TERM", "") not in ("", "dumb")
     use_tui = (
         not args.plain
+        and CURSES_AVAILABLE
+        and (args.tui or not IS_WINDOWS)
+        and term_ok
         and sys.stdout.isatty()
         and sys.stdin.isatty()
-        and os.environ.get("TERM", "") not in ("", "dumb")
     )
 
     services: list[Service] = []
